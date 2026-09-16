@@ -1,0 +1,60 @@
+# Build outputs
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio, VS Code and JetBrains Rider
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Test and coverage results
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# NuGet and tooling artifacts
+*.nupkg
+*.snupkg
+packages/
+.dotnet/
+global-packages/
+
+# Local ASP.NET Core configuration and secrets
+HopitalApi/appsettings.*.json
+!HopitalApi/appsettings.json
+secrets.json
+*.pfx
+*.pem
+*.key
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Runtime and local data
+logs/
+uploads/
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Docker local overrides and volumes
+docker-compose.override.yml
+docker-compose.local.yml
+docker-data/
+
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
