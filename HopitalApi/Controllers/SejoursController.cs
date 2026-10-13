@@ -28,10 +28,11 @@ public class SejoursController : BaseController
         return Ok(list.Select(s =>
         {
             var jours = Math.Max(0, (int)(DateTime.UtcNow - s.Entree).TotalDays);
-            var (j0, j1, j2) = PrevisionCapaciteService.ProbaSortie(s.Id, jours);
+            var (j0, j1, j2) = PrevisionCapaciteService.ProbaSortie(s);
             return new SejourDto(s.Id, s.Reference, s.PatientId,
                 s.Patient is null ? "" : $"{s.Patient.Nom} {s.Patient.Prenom}",
-                s.ServiceId, s.Service?.Nom ?? "", s.Lit?.Code, s.Entree, jours, s.MotifBlocage, j0, j1, j2);
+                s.ServiceId, s.Service?.Nom ?? "", s.Lit?.Code, s.Entree, jours, s.MotifBlocage, j0, j1, j2,
+                s.DiagnosticEntree);
         }).ToList());
     }
 
@@ -47,7 +48,8 @@ public class SejoursController : BaseController
         var s = new Sejour
         {
             Reference = $"S-{800 + n + 1}", PatientId = dto.PatientId, ServiceId = dto.ServiceId,
-            LitId = dto.LitId, MotifBlocage = dto.MotifBlocage, Entree = DateTime.UtcNow
+            LitId = dto.LitId, MotifBlocage = dto.MotifBlocage, Entree = DateTime.UtcNow,
+            DiagnosticEntree = string.IsNullOrWhiteSpace(dto.DiagnosticEntree) ? null : dto.DiagnosticEntree.Trim()
         };
         svc.Occupes++;
         if (dto.LitId is int lid)
@@ -58,19 +60,22 @@ public class SejoursController : BaseController
         _db.Sejours.Add(s);
         await _db.SaveChangesAsync();
         await _audit.LogAsync("creation", "Admission en hospitalisation", s.Reference);
-        return Ok(new SejourDto(s.Id, s.Reference, s.PatientId, "", s.ServiceId, svc.Nom, null, s.Entree, 0, s.MotifBlocage, 0, 0, 0));
+        return Ok(new SejourDto(s.Id, s.Reference, s.PatientId, "", s.ServiceId, svc.Nom, null, s.Entree, 0, s.MotifBlocage, null, null, null, s.DiagnosticEntree));
     }
 
+    /// <summary>Sortie avec son issue — même vocabulaire que le dataset harmonisé, pour le modèle à risques concurrents.</summary>
     [HttpPost("{id:int}/sortie")]
-    public async Task<IActionResult> Sortie(int id)
+    public async Task<IActionResult> Sortie(int id, SortieSejourDto dto)
     {
+        if (!HopitalApi.Services.Recherche.Dictionnaire.Issues.Contains(dto.Issue))
+            return BadRequest(new { message = $"Issue attendue : {string.Join(", ", HopitalApi.Services.Recherche.Dictionnaire.Issues)}." });
         var s = await _db.Sejours.Include(x => x.Service).Include(x => x.Lit).FirstOrDefaultAsync(x => x.Id == id);
         if (s is null) return NotFound();
-        s.Statut = "Terminé"; s.Sortie = DateTime.UtcNow;
+        s.Statut = "Terminé"; s.Sortie = DateTime.UtcNow; s.Issue = dto.Issue;
         if (s.Service is not null && s.Service.Occupes > 0) s.Service.Occupes--;
         if (s.Lit is not null) s.Lit.Statut = "Libre";
         await _db.SaveChangesAsync();
-        await _audit.LogAsync("modification", "Sortie d'hospitalisation", s.Reference);
+        await _audit.LogAsync("modification", "Sortie d'hospitalisation", s.Reference, dto.Issue);
         return NoContent();
     }
 

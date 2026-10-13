@@ -67,6 +67,77 @@ namespace HopitalApi.Migrations
                     b.ToTable("Audits");
                 });
 
+            modelBuilder.Entity("HopitalApi.Models.ColonneSource", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("EtablissementId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("NomColonne")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Registre")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ValeurFixe")
+                        .HasColumnType("text");
+
+                    b.Property<string>("VariableCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EtablissementId", "Registre", "VariableCode")
+                        .IsUnique();
+
+                    b.ToTable("ColonnesSource");
+                });
+
+            modelBuilder.Entity("HopitalApi.Models.Correspondance", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Cle")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("EtablissementId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ValeurBrute")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("ValeurNormalisee")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("VariableCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EtablissementId", "VariableCode", "Cle")
+                        .IsUnique();
+
+                    b.ToTable("Correspondances");
+                });
+
             modelBuilder.Entity("HopitalApi.Models.DemandeNonSatisfaite", b =>
                 {
                     b.Property<int>("Id")
@@ -107,6 +178,234 @@ namespace HopitalApi.Migrations
                     b.ToTable("Demandes");
                 });
 
+            modelBuilder.Entity("HopitalApi.Models.EnregistrementConsultation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<double?>("AgeMois")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("AgeUnite")
+                        .HasColumnType("text");
+
+                    b.Property<double?>("AgeValeur")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<int>("EtablissementId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Fc")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Fr")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("IdAnonyme")
+                        .HasColumnType("text");
+
+                    b.Property<int>("LotImportId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Motif")
+                        .HasColumnType("text");
+
+                    b.Property<int>("NumeroLigne")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Orientation")
+                        .HasColumnType("text");
+
+                    b.Property<string>("OrientationBrute")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("Pad")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Pas")
+                        .HasColumnType("integer");
+
+                    b.Property<double?>("Poids")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("Quartier")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ServiceBrut")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("ServiceId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Sexe")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SexeBrut")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("Spo2")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SymptomesBrut")
+                        .HasColumnType("text");
+
+                    b.Property<double?>("Temperature")
+                        .HasColumnType("double precision");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LotImportId");
+
+                    b.HasIndex("ServiceId");
+
+                    b.HasIndex("EtablissementId", "ServiceId", "Date");
+
+                    b.ToTable("Consultations");
+                });
+
+            modelBuilder.Entity("HopitalApi.Models.EnregistrementHospitalisation", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<double?>("AgeMois")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("AgeUnite")
+                        .HasColumnType("text");
+
+                    b.Property<double?>("AgeValeur")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("AncienNouveau")
+                        .HasColumnType("text");
+
+                    b.Property<string>("AncienNouveauBrut")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Bilan")
+                        .HasColumnType("text");
+
+                    b.Property<DateOnly?>("DateEnregistrement")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("DateEntree")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly?>("DateSortie")
+                        .HasColumnType("date");
+
+                    b.Property<bool>("DateSortieCalculee")
+                        .HasColumnType("boolean");
+
+                    b.Property<double?>("DensiteParasitaire")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("DiagnosticEntree")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DiagnosticEntreeBrut")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DiagnosticSortie")
+                        .HasColumnType("text");
+
+                    b.Property<string>("DiagnosticSortieBrut")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("DureeJoursDeclaree")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EtablissementId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Fc")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Fr")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("GeTdr")
+                        .HasColumnType("text");
+
+                    b.Property<string>("GeTdrBrut")
+                        .HasColumnType("text");
+
+                    b.Property<string>("IdAnonyme")
+                        .HasColumnType("text");
+
+                    b.Property<string>("Issue")
+                        .HasColumnType("text");
+
+                    b.Property<string>("IssueBrute")
+                        .HasColumnType("text");
+
+                    b.Property<int>("LotImportId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("NumeroLigne")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Pad")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Pas")
+                        .HasColumnType("integer");
+
+                    b.Property<double?>("Poids")
+                        .HasColumnType("double precision");
+
+                    b.Property<decimal?>("Prix")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)");
+
+                    b.Property<string>("Quartier")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ServiceBrut")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("ServiceId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Sexe")
+                        .HasColumnType("text");
+
+                    b.Property<string>("SexeBrut")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("Spo2")
+                        .HasColumnType("integer");
+
+                    b.Property<double?>("Temperature")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("TraitementInitial")
+                        .HasColumnType("text");
+
+                    b.Property<string>("TraitementSortie")
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LotImportId");
+
+                    b.HasIndex("ServiceId");
+
+                    b.HasIndex("EtablissementId", "ServiceId", "DateEntree");
+
+                    b.ToTable("Hospitalisations");
+                });
+
             modelBuilder.Entity("HopitalApi.Models.Etablissement", b =>
                 {
                     b.Property<int>("Id")
@@ -131,6 +430,10 @@ namespace HopitalApi.Migrations
                         .HasColumnType("text");
 
                     b.Property<string>("Region")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("RoleRecherche")
                         .IsRequired()
                         .HasColumnType("text");
 
@@ -170,6 +473,57 @@ namespace HopitalApi.Migrations
                     b.HasIndex("ServiceId");
 
                     b.ToTable("Lits");
+                });
+
+            modelBuilder.Entity("HopitalApi.Models.LotImport", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("Doublons")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EtablissementId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("ImporteLe")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ImportePar")
+                        .HasColumnType("text");
+
+                    b.Property<int>("LignesImportees")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LignesLues")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("LignesRejetees")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("NomFichier")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("RapportJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Registre")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("ServiceParDefautId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EtablissementId");
+
+                    b.ToTable("LotsImport");
                 });
 
             modelBuilder.Entity("HopitalApi.Models.Notification", b =>
@@ -633,8 +987,14 @@ namespace HopitalApi.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("DiagnosticEntree")
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("Entree")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Issue")
+                        .HasColumnType("text");
 
                     b.Property<int?>("LitId")
                         .HasColumnType("integer");
@@ -737,10 +1097,8 @@ namespace HopitalApi.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Code")
+                    b.HasIndex("EtablissementId", "Code")
                         .IsUnique();
-
-                    b.HasIndex("EtablissementId");
 
                     b.ToTable("Services");
                 });
@@ -853,6 +1211,28 @@ namespace HopitalApi.Migrations
                     b.ToTable("Utilisateurs");
                 });
 
+            modelBuilder.Entity("HopitalApi.Models.ColonneSource", b =>
+                {
+                    b.HasOne("HopitalApi.Models.Etablissement", "Etablissement")
+                        .WithMany()
+                        .HasForeignKey("EtablissementId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Etablissement");
+                });
+
+            modelBuilder.Entity("HopitalApi.Models.Correspondance", b =>
+                {
+                    b.HasOne("HopitalApi.Models.Etablissement", "Etablissement")
+                        .WithMany()
+                        .HasForeignKey("EtablissementId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Etablissement");
+                });
+
             modelBuilder.Entity("HopitalApi.Models.DemandeNonSatisfaite", b =>
                 {
                     b.HasOne("HopitalApi.Models.Service", "Service")
@@ -860,6 +1240,58 @@ namespace HopitalApi.Migrations
                         .HasForeignKey("ServiceId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("Service");
+                });
+
+            modelBuilder.Entity("HopitalApi.Models.EnregistrementConsultation", b =>
+                {
+                    b.HasOne("HopitalApi.Models.Etablissement", "Etablissement")
+                        .WithMany()
+                        .HasForeignKey("EtablissementId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("HopitalApi.Models.LotImport", "LotImport")
+                        .WithMany()
+                        .HasForeignKey("LotImportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("HopitalApi.Models.Service", "Service")
+                        .WithMany()
+                        .HasForeignKey("ServiceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Etablissement");
+
+                    b.Navigation("LotImport");
+
+                    b.Navigation("Service");
+                });
+
+            modelBuilder.Entity("HopitalApi.Models.EnregistrementHospitalisation", b =>
+                {
+                    b.HasOne("HopitalApi.Models.Etablissement", "Etablissement")
+                        .WithMany()
+                        .HasForeignKey("EtablissementId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("HopitalApi.Models.LotImport", "LotImport")
+                        .WithMany()
+                        .HasForeignKey("LotImportId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("HopitalApi.Models.Service", "Service")
+                        .WithMany()
+                        .HasForeignKey("ServiceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Etablissement");
+
+                    b.Navigation("LotImport");
 
                     b.Navigation("Service");
                 });
@@ -873,6 +1305,17 @@ namespace HopitalApi.Migrations
                         .IsRequired();
 
                     b.Navigation("Service");
+                });
+
+            modelBuilder.Entity("HopitalApi.Models.LotImport", b =>
+                {
+                    b.HasOne("HopitalApi.Models.Etablissement", "Etablissement")
+                        .WithMany()
+                        .HasForeignKey("EtablissementId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Etablissement");
                 });
 
             modelBuilder.Entity("HopitalApi.Models.Passage", b =>

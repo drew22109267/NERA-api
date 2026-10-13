@@ -122,7 +122,7 @@ public class PassagesController : BaseController
             Glasgow = dto.Glasgow, Eva = dto.Eva, CategorieManuelle = dto.CategorieManuelle
         };
         var r = _score.Evaluer(t, patient, motif, mode);
-        return new EvaluationTriageDto(r.Score, r.Categorie, r.Confiance, r.Incertain, r.Manquants,
+        return new EvaluationTriageDto(r.Disponible, r.Raison, r.Score, r.Categorie, r.Confiance, r.Incertain, r.Manquants,
             r.Contributions.Select(c => new ContributionDto(c.Label, c.Poids)).ToList(),
             new ScoresDerivesDto(r.IndexChoc, r.Pam, r.QSofa, r.QSofaConnus, r.Mews), r.Modele);
     }
@@ -135,8 +135,10 @@ public class PassagesController : BaseController
 
         var c = dto.Constantes;
         var eval = Evaluation(c, p.Patient, p.Motif, p.ModeEntree);
-        var retenue = dto.CategorieRetenue ?? eval.Categorie;
-        var correction = retenue != eval.Categorie;
+        // Sans modèle, la catégorie est celle que l'infirmier fixe ; rien n'est proposé à sa place.
+        if ((dto.CategorieRetenue ?? eval.Categorie) is not int retenue)
+            return BadRequest(new { message = "Aucun modèle de triage n'est branché : choisissez la catégorie retenue." });
+        var correction = eval.Categorie is not null && retenue != eval.Categorie;
         if (correction && string.IsNullOrWhiteSpace(dto.MotifCorrection))
             return BadRequest(new { message = "Le motif de correction est obligatoire lorsque vous modifiez la catégorie proposée." });
 
@@ -152,19 +154,21 @@ public class PassagesController : BaseController
         if (p.Statut == "À trier") p.Statut = "En attente";
         if (correction)
         {
-            p.CorrectionAncienne = eval.Categorie; p.CorrectionNouvelle = retenue;
+            p.CorrectionAncienne = eval.Categorie!.Value; p.CorrectionNouvelle = retenue;
             p.CorrectionMotif = dto.MotifCorrection; p.CorrectionAuteur = UserNom;
             p.CorrectionLe = DateTime.UtcNow;
         }
 
-        _db.Predictions.Add(new PredictionLog
-        {
-            PassageId = p.Id, Modele = eval.Modele, TypeModele = "triage",
-            Score = eval.Score, Sortie = eval.Categorie, Confiance = eval.Confiance,
-            ExplicationJson = TriageScoreService.Serialiser(eval.Contributions),
-            EntreeJson = TriageScoreService.Serialiser(c),
-            DecisionHumaine = retenue, Ecart = correction
-        });
+        // Le journal des prédictions ne reçoit que de vraies sorties de modèle.
+        if (eval.Disponible && eval.Score is double score && eval.Categorie is int sortie && eval.Confiance is double confiance)
+            _db.Predictions.Add(new PredictionLog
+            {
+                PassageId = p.Id, Modele = eval.Modele, TypeModele = "triage",
+                Score = score, Sortie = sortie, Confiance = confiance,
+                ExplicationJson = TriageScoreService.Serialiser(eval.Contributions),
+                EntreeJson = TriageScoreService.Serialiser(c),
+                DecisionHumaine = retenue, Ecart = correction
+            });
 
         if (retenue <= 2)
             _db.Notifications.Add(new Notification
@@ -218,7 +222,8 @@ public class PassagesController : BaseController
                 _db.Sejours.Add(new Sejour
                 {
                     Reference = $"S-{800 + n + 1}", PatientId = p.PatientId,
-                    ServiceId = sid, Entree = DateTime.UtcNow
+                    ServiceId = sid, Entree = DateTime.UtcNow,
+                    DiagnosticEntree = string.IsNullOrWhiteSpace(dto.DiagnosticEntree) ? null : dto.DiagnosticEntree.Trim()
                 });
             }
         }

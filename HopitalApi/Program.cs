@@ -18,6 +18,12 @@ builder.Services.AddScoped<AuditService>();
 builder.Services.AddScoped<TriageScoreService>();
 builder.Services.AddScoped<OrientationService>();
 builder.Services.AddScoped<PrevisionCapaciteService>();
+builder.Services.AddScoped<SynthesePatientService>();
+builder.Services.AddScoped<HopitalApi.Services.Recherche.ImportRegistreService>();
+builder.Services.AddScoped<HopitalApi.Services.Recherche.IndicateursService>();
+
+// Les CSV enregistrés par Excel en français sont en Windows-1252.
+System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
 
 builder.Services.AddControllers().AddJsonOptions(o =>
 {

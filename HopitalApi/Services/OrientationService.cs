@@ -23,10 +23,21 @@ public class OrientationService
     readonly AppDbContext _db;
     public OrientationService(AppDbContext db) => _db = db;
 
-    public async Task<ResultatOrientation> OrienterAsync(string motif, int age, string sexe, int? categorie, List<string>? antecedents = null)
+    public async Task<ResultatOrientation> OrienterAsync(string motif, int age, string sexe, int? categorie,
+        List<string>? antecedents = null, int? etablissementId = null)
     {
         antecedents ??= new List<string>();
-        var services = await _db.Services.Where(s => s.Actif && s.Hospitalisation).ToListAsync();
+        // Un même code de service peut exister dans chaque hôpital : on oriente dans un seul hôpital.
+        if (etablissementId is null)
+        {
+            var actifs = await _db.Etablissements.Where(e => e.Actif).Select(e => e.Id).ToListAsync();
+            if (actifs.Count == 1) etablissementId = actifs[0];
+            else if (actifs.Count > 1)
+                return new ResultatOrientation(motif, categorie, "Plusieurs hôpitaux sont paramétrés.",
+                    new List<PropositionService>(), "Choisissez l'hôpital dans lequel orienter le patient.");
+        }
+        var services = await _db.Services
+            .Where(s => s.Actif && s.Hospitalisation && s.EtablissementId == etablissementId).ToListAsync();
         if (services.Count == 0)
             return new ResultatOrientation(motif, categorie, "Aucun service d'hospitalisation paramétré.",
                 new List<PropositionService>(), "Base de services vide — paramétrez l'établissement avant d'orienter.");

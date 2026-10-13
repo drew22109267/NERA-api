@@ -4,6 +4,13 @@ API REST qui remplace intégralement les données locales du frontend. Aucune do
 de patient n'est pré-remplie : la base démarre avec les seules données de référence
 (établissement, services, lits, règles d'orientation, paramètres, comptes).
 
+Le dépôt contient deux parties :
+
+| Dossier | Contenu | Documentation |
+| --- | --- | --- |
+| `HopitalApi/` | API REST de l'application hospitalière (.NET 8, PostgreSQL) | ce document |
+| `modeles/` | code du mémoire : reconstitution de l'occupation des lits, statistiques, modèles SVR écrits à la main (PyTorch), outil de saisie des registres | [`modeles/README.md`](modeles/README.md) : installation, parcours des données, toutes les formules mathématiques, fichier par fichier, ordre des scripts, tests |
+
 ## Prérequis
 
 - .NET SDK 8.0

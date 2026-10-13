@@ -87,6 +87,15 @@ public class PatientsController : BaseController
         return CreatedAtAction(nameof(Detail), new { id = p.Id }, Map(p));
     }
 
+    /// <summary>Synthèse de l'espace patient — calculée côté serveur, jamais dans le navigateur.</summary>
+    [HttpGet("{id:int}/synthese")]
+    public async Task<IActionResult> Synthese(int id, [FromServices] SynthesePatientService svc)
+    {
+        if (UserRole == "patient" && UserPatientId != id) return Forbid();
+        var s = await svc.SyntheseAsync(id);
+        return s is null ? NotFound(new { message = "Dossier introuvable." }) : Ok(s);
+    }
+
     [HttpPut("{id:int}")]
     public async Task<ActionResult<PatientDto>> Modifier(int id, PatientUpsertDto dto)
     {

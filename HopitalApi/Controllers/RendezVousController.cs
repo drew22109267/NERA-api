@@ -59,7 +59,7 @@ public class RendezVousController : BaseController
         {
             serviceId, service = svc.Nom, date,
             risqueSaturation = risque,
-            niveau = risque > 0.7 ? "crit" : risque > 0.4 ? "warn" : "ok",
+            niveau = risque is null ? null : risque > 0.7 ? "crit" : risque > 0.4 ? "warn" : "ok",
             creneaux = heures.Select(h => new { heure = h, libre = !pris.Contains(h) })
         });
     }

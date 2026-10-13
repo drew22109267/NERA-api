@@ -10,6 +10,8 @@ public class Etablissement
     public string Ville { get; set; } = "";
     public string Region { get; set; } = "";
     public bool Actif { get; set; } = true;
+    /// <summary>Rôle dans l'étude : « Développement » (hôpital A) · « Validation externe » (hôpital B) · vide.</summary>
+    public string RoleRecherche { get; set; } = "";
 
     public List<Service> Services { get; set; } = new();
 }
@@ -170,6 +172,10 @@ public class Sejour
     public DateTime? Sortie { get; set; }
     public string? MotifBlocage { get; set; }
     public string Statut { get; set; } = "En cours";
+    /// <summary>Catégorie de diagnostic d'entrée, même liste que le dataset harmonisé.</summary>
+    public string? DiagnosticEntree { get; set; }
+    /// <summary>Issue à la sortie, même vocabulaire que le dataset harmonisé.</summary>
+    public string? Issue { get; set; }
 }
 
 public class RendezVous

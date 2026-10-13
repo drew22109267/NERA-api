@@ -58,3 +58,20 @@ docker-data/
 .DS_Store
 Thumbs.db
 Desktop.ini
+
+# Modèles (Python) : données patients et sorties jamais suivies par git
+modeles/donnees/
+modeles/resultats/
+__pycache__/
+.pytest_cache/
+
+# Outil de saisie : photos de registres, exports et sauvegardes = données de patients, jamais sur git
+modeles/outil-saisie/photos*/
+modeles/outil-saisie/**/*.jpg
+modeles/outil-saisie/**/*.jpeg
+modeles/outil-saisie/**/*.heic
+modeles/outil-saisie/**/*.csv
+modeles/outil-saisie/**/*.json
+
+# Réglages locaux de l outil de développement
+.claude/

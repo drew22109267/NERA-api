@@ -76,8 +76,9 @@ public class RapportsController : BaseController
         {
             var libres = Math.Max(0, s.LitsArmes - s.Occupes - s.Bloques);
             var taux = s.LitsArmes > 0 ? 100.0 * s.Occupes / s.LitsArmes : 0;
+            // Sans modèle de prévision, la colonne de risque reste vide plutôt que d'afficher une estimation.
             var risque = PrevisionCapaciteService.RisqueSaturation(_prev.Prevoir(s, 7).Points, 3) * 100;
-            sb.AppendLine($"{s.Code};{s.Nom};{s.Pole};{s.LitsInstalles};{s.LitsArmes};{s.Occupes};{s.Bloques};{libres};{taux:F1};{risque:F1}");
+            sb.AppendLine($"{s.Code};{s.Nom};{s.Pole};{s.LitsInstalles};{s.LitsArmes};{s.Occupes};{s.Bloques};{libres};{taux:F1};{(risque is double r ? r.ToString("F1") : "")}");
         }
         return File(Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray(),
             "text/csv", $"occupation-{DateTime.UtcNow:yyyy-MM-dd}.csv");
@@ -240,5 +241,18 @@ public class ParametresController : BaseController
         var e = await _db.Etablissements.AsNoTracking().FirstOrDefaultAsync();
         return e is null ? NotFound(new { message = "Aucun établissement paramétré." })
             : Ok(new { e.Id, e.Code, e.Nom, e.Categorie, e.Ville, e.Region });
+    }
+
+    /// <summary>Identité de l'établissement, renseignée par l'administration.</summary>
+    [HttpPut("etablissement"), Authorize(Roles = "admin")]
+    public async Task<IActionResult> ModifierEtablissement(EtablissementDto dto)
+    {
+        var e = await _db.Etablissements.FirstOrDefaultAsync() ?? new Etablissement();
+        e.Nom = dto.Nom.Trim(); e.Code = dto.Code.Trim(); e.Categorie = dto.Categorie.Trim();
+        e.Ville = dto.Ville.Trim(); e.Region = dto.Region.Trim();
+        if (e.Id == 0) _db.Etablissements.Add(e);
+        await _db.SaveChangesAsync();
+        await _audit.LogAsync("modification", "Modification de la fiche établissement", e.Nom);
+        return Ok(new { e.Id, e.Code, e.Nom, e.Categorie, e.Ville, e.Region });
     }
 }

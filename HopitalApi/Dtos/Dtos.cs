@@ -104,7 +104,8 @@ public class TriageSubmitDto
 public record ContributionDto(string Label, double Poids);
 public record ScoresDerivesDto(double? IndexChoc, int? Pam, int QSofa, int QSofaConnus, int Mews);
 public record EvaluationTriageDto(
-    double Score, int Categorie, double Confiance, bool Incertain,
+    bool Disponible, string? Raison,
+    double? Score, int? Categorie, double? Confiance, bool Incertain,
     List<string> Manquants, List<ContributionDto> Contributions,
     ScoresDerivesDto Derives, string Modele);
 
@@ -114,13 +115,83 @@ public class DecisionCreateDto
     public int? ServiceId { get; set; }
     public string? Motif { get; set; }
     [Required] public string Recommandation { get; set; } = "";
+    /// <summary>Catégorie de diagnostic d'entrée, enregistrée sur le séjour en cas d'admission.</summary>
+    public string? DiagnosticEntree { get; set; }
 }
 
 // ── Capacité ───────────────────────────────────────────────
 public record ServiceDto(
-    int Id, string Code, string Nom, string Pole, bool Hospitalisation, bool UrgencesCompatible,
+    int Id, int EtablissementId, string Code, string Nom, string Pole, bool Hospitalisation, bool UrgencesCompatible,
     int AgeMin, int AgeMax, int LitsInstalles, int LitsArmes, int Occupes, int Bloques,
     int Programmes, int Libres, double TauxOccupation, string Niveau);
+
+/// <summary>Création ou modification complète d'un service par l'administration.</summary>
+public class ServiceUpsertDto
+{
+    [Required, MinLength(2), MaxLength(12)] public string Code { get; set; } = "";
+    [Required, MinLength(2)] public string Nom { get; set; } = "";
+    [Required, MinLength(2)] public string Pole { get; set; } = "";
+    public bool Hospitalisation { get; set; } = true;
+    public bool UrgencesCompatible { get; set; }
+    [Range(0, 120)] public int AgeMin { get; set; }
+    [Range(0, 120)] public int AgeMax { get; set; } = 120;
+    [Range(0, 2000)] public int LitsInstalles { get; set; }
+    [Range(0, 2000)] public int LitsArmes { get; set; }
+    public int? Ordre { get; set; }
+    /// <summary>Obligatoire dès qu'il existe plus d'un hôpital.</summary>
+    public int? EtablissementId { get; set; }
+}
+
+public record EtablissementListeDto(int Id, string Code, string Nom, string Categorie, string Ville,
+    string Region, bool Actif, string RoleRecherche, int Services);
+
+public class RoleRechercheDto { public string? Role { get; set; } }
+
+public class ColonneSourceDto
+{
+    [Required] public string VariableCode { get; set; } = "";
+    public string? NomColonne { get; set; }
+    public string? ValeurFixe { get; set; }
+    public string? Note { get; set; }
+}
+
+public class ColonnesRegistreDto
+{
+    [Required] public string Registre { get; set; } = "";
+    public List<ColonneSourceDto> Colonnes { get; set; } = new();
+}
+
+public class CorrespondanceDto
+{
+    [Required] public string VariableCode { get; set; } = "";
+    [Required] public string ValeurBrute { get; set; } = "";
+    [Required] public string ValeurNormalisee { get; set; } = "";
+}
+
+public class EtablissementDto
+{
+    [Required] public string Nom { get; set; } = "";
+    public string Code { get; set; } = "";
+    public string Categorie { get; set; } = "";
+    public string Ville { get; set; } = "";
+    public string Region { get; set; } = "";
+}
+
+public record RegleOrientationDto(int Id, string Motif, string ServiceCode, string? ServiceAlternatifCode,
+    int AgeMin, int AgeMax, string? SexeRequis, int? CategorieMax, string? Commentaire, int Priorite);
+
+public class RegleOrientationUpsertDto
+{
+    [Required, MinLength(2)] public string Motif { get; set; } = "";
+    [Required] public string ServiceCode { get; set; } = "";
+    public string? ServiceAlternatifCode { get; set; }
+    [Range(0, 120)] public int AgeMin { get; set; }
+    [Range(0, 120)] public int AgeMax { get; set; } = 120;
+    [RegularExpression("^[FM]?$")] public string? SexeRequis { get; set; }
+    [Range(1, 4)] public int? CategorieMax { get; set; }
+    public string? Commentaire { get; set; }
+    public int Priorite { get; set; } = 100;
+}
 
 public class ServiceUpdateDto
 {
@@ -134,13 +205,13 @@ public class ServiceUpdateDto
 }
 
 public record PrevisionPointDto(int Jour, double Bas, double Median, double Haut, int Capacite);
-public record PrevisionDto(int ServiceId, string Nom, int Capacite, List<PrevisionPointDto> Points,
-    Dictionary<int, double> Risques, List<DecompositionDto> Decomposition, string Modele);
+public record PrevisionDto(int ServiceId, string Nom, int Capacite, bool Disponible, string? Raison,
+    List<PrevisionPointDto> Points, Dictionary<int, double> Risques, List<DecompositionDto> Decomposition, string Modele);
 public record DecompositionDto(string Label, int Valeur);
 
 public record SejourDto(int Id, string Reference, int PatientId, string PatientNom, int ServiceId,
     string ServiceNom, string? Lit, DateTime Entree, int Jours, string? MotifBlocage,
-    double ProbaJ0, double ProbaJ1, double ProbaJ2);
+    double? ProbaJ0, double? ProbaJ1, double? ProbaJ2, string? DiagnosticEntree);
 
 public class SejourCreateDto
 {
@@ -148,6 +219,12 @@ public class SejourCreateDto
     [Required] public int ServiceId { get; set; }
     public int? LitId { get; set; }
     public string? MotifBlocage { get; set; }
+    public string? DiagnosticEntree { get; set; }
+}
+
+public class SortieSejourDto
+{
+    [Required] public string Issue { get; set; } = "";
 }
 
 // ── Programmation ──────────────────────────────────────────
@@ -216,7 +293,7 @@ public record TableauBordDto(
     int AttenteMoyenneMinutes, int SejoursEnCours, int RendezVousAVenir, int DemandesNonSatisfaites,
     List<ServiceRisqueDto> Risques, List<int> FluxHoraire, List<string> LabelsHoraire);
 
-public record ServiceRisqueDto(int ServiceId, string Nom, double TauxOccupation, double Risque, string Niveau);
+public record ServiceRisqueDto(int ServiceId, string Nom, double TauxOccupation, double? Risque, string Niveau);
 
 public record QualiteDto(
     int PredictionsTotal, int Ecarts, double TauxCorrection,

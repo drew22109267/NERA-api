@@ -1,0 +1,2090 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NERA — Saisie des registres</title>
+<link rel="icon" type="image/png" href="assets/favicon-32.png">
+<!-- Même design que l’application NERA : copie de sa feuille de style (app/src/styles/theme.css) dans assets/. -->
+<link rel="stylesheet" href="assets/theme.css">
+<style>
+  /* Mise en page propre à l'outil, avec les seules variables de l'application. */
+  /* Deux couleurs : le NOIR pour la navigation (barre latérale, choix de période) ; le BLEU pour les
+     actions, les filtres des statistiques, les données et le focus clavier. */
+  :root { --noir: #0b0b0c; --noir-soft: #eceef1; }
+  .seg-opt:has(input:checked) { background: var(--noir); color: #fff; }
+  html, body { height: 100%; }
+  body { overflow: hidden; }
+  /* ── Barre latérale de l'application (fixe, pleine hauteur) et colonne principale ── */
+  .shell { height: 100vh; min-height: 0; --sidebar-w: 256px; }
+  .sidebar { height: 100vh; background: var(--surface); padding: 16px 12px 12px; gap: 4px; }
+  .sidebar-top { padding: 0 4px 14px; }
+  .sidebar .brand-text { font-size: 16px; }
+  /* Barre de défilement fine mais toujours visible : on voit qu'il y a de la suite sous « Données ». */
+  .sidebar nav { padding: 2px 8px 12px 12px; margin: 0 -12px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: #c9cdd3 transparent; scrollbar-gutter: stable; }
+  .sidebar nav::-webkit-scrollbar { width: 6px; }
+  .sidebar nav::-webkit-scrollbar-track { background: transparent; }
+  .sidebar nav::-webkit-scrollbar-thumb { background: #c9cdd3; border-radius: 3px; }
+  .sidebar nav::-webkit-scrollbar-thumb:hover { background: #9ca2ab; }
+  .nav-group { gap: 2px; }
+  .nav-group + .nav-group { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); }
+  .nav-group h6 { margin: 12px 10px 6px; font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted-2); }
+  .nav-link { width: 100%; font: inherit; font-size: 13.5px; font-weight: 500; padding: 9px 10px 9px 12px; gap: 11px; background: none; cursor: pointer; text-align: left; color: #4a5059; border: 0; border-radius: 6px; }
+  .nav-link input { display: none; }
+  .nav-link .nav-ico { flex: none; color: var(--muted); }
+  .nav-link:hover { background: var(--surface-2); color: var(--ink); }
+  .nav-link:hover .nav-ico { color: var(--ink); }
+  .nav-link:has(input:checked) { background: var(--noir-soft); color: var(--noir); font-weight: 650; box-shadow: none; }
+  .nav-link:has(input:checked) .nav-ico { color: var(--noir); }
+  .nav-link:has(input:checked)::before { content: ""; position: absolute; left: -12px; top: 7px; bottom: 7px; width: 3px; border-radius: 0 3px 3px 0; background: var(--noir); }
+  .nav-link:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+  .nav-count { font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 9px; background: var(--surface-2); color: var(--muted); }
+  .nav-link:has(input:checked) .nav-count { background: var(--surface); color: var(--noir); }
+  .nav-chevron { margin-left: auto; color: var(--muted-2); transition: transform .18s; transform: rotate(-90deg); }
+  .nav-parent:has(input:checked) .nav-chevron { transform: none; color: var(--noir); }
+  .shell.ind-ferme .nav-parent .nav-chevron { transform: rotate(-90deg); }
+  /* Rubrique « Indicateurs » ouverte : le parent garde la couleur, la sous-rubrique active porte le fond. */
+  .nav-parent:has(input:checked) { background: none; }
+  .nav-parent:has(input:checked):hover { background: var(--surface-2); }
+  .shell.ind-ferme .nav-parent:has(input:checked) { background: var(--noir-soft); }
+  .nav-parent:has(input:checked)::before { display: none; }
+  .shell.ind-ferme .nav-parent:has(input:checked)::before { display: block; }
+  .nav-sous { display: none; margin: 2px 0 8px 21px; padding-left: 0; border-left: 1px solid var(--line); }
+  .nav-parent:has(input:checked) + .nav-sous { display: flex; flex-direction: column; gap: 1px; animation: sousOuvrir .16s ease-out; }
+  .shell.ind-ferme .nav-sous { display: none !important; }
+  @keyframes sousOuvrir { from { opacity: 0; transform: translateY(-4px) } to { opacity: 1; transform: none } }
+  @media (prefers-reduced-motion: reduce) { .nav-sous { animation: none !important; } .nav-chevron { transition: none; } }
+  .carte-sauv { flex: none; margin-top: 4px; padding: 12px; border-radius: 8px; color: #fff; background: #000; display: flex; flex-direction: column; gap: 6px; }
+  .carte-sauv-tete { display: flex; align-items: center; gap: 9px; font-size: 13.5px; }
+  .carte-sauv-ico { width: 28px; height: 28px; border-radius: 6px; display: grid; place-items: center; background: rgba(255,255,255,.14); }
+  .carte-sauv p { margin: 0; font-size: 11.5px; line-height: 1.45; color: rgba(255,255,255,.78); }
+  .carte-sauv .btn { justify-content: center; gap: 7px; margin-top: 4px; background: #fff; color: #000; border: 0; font-weight: 700; }
+  .carte-sauv .btn:hover { background: #e9e9e9; }
+  .carte-sauv.a-faire p { color: #fff; }
+  /* Barre réduite (icônes seules) : seulement sur grand écran ; sur petit écran, elle s'ouvre par-dessus la page. */
+  @media (min-width: 901px) {
+    .shell.collapsed { --sidebar-w: 72px; }
+    .shell.collapsed .nav-chevron, .shell.collapsed .nav-sous, .shell.collapsed .carte-sauv p, .shell.collapsed .carte-sauv-tete b, .shell.collapsed .carte-sauv .btn span { display: none !important; }
+    .shell.collapsed .nav-link { justify-content: center; padding: 10px; }
+    .shell.collapsed .nav-count { display: none; }
+    .shell.collapsed .nav-group h6 { visibility: hidden; height: 0; margin: 6px 0; }
+    .shell.collapsed .carte-sauv { padding: 8px; align-items: center; }
+    .shell.collapsed .carte-sauv-tete { justify-content: center; }
+    .shell.collapsed .carte-sauv .btn { width: 36px; height: 32px; padding: 0; }
+    .shell.collapsed .collapse-btn svg { transform: scaleX(-1); }
+  }
+  .main { height: 100vh; min-height: 0; overflow: hidden; background: var(--tray); }
+  .topbar { position: static; flex-wrap: wrap; row-gap: 8px; column-gap: 14px; border-bottom: 1px solid var(--line); background: var(--surface); backdrop-filter: none; padding: 10px var(--space-6); min-height: 60px; }
+  .topbar .topbar-title { font-size: 18px; }
+  .ind-3d { margin-left: 0 !important; }
+  .ind-tete .seg[hidden] { display: none; }
+  .ind-tete { justify-content: flex-start; }
+  .ind-tete-droite { justify-content: flex-start; }
+  .topbar-ind { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1 1 auto; }
+  .topbar-ind[hidden] { display: none; }
+  .topbar-ind b { font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .topbar-ind #indPeriode { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ind-tete-droite { flex-wrap: wrap; }
+  .ind-par { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #3d434c; }
+  .ind-par .input { min-height: 34px; padding: 4px 26px 4px 10px; width: auto; font-weight: 600; }
+  .ind-pop-zone { position: relative; }
+  .ind-pop-btn { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 10px; font: inherit; font-size: 13px; font-weight: 600; color: #3d434c;
+    background: var(--surface); border: 1px solid var(--line-strong); border-radius: 6px; cursor: pointer; white-space: nowrap; max-width: 340px; }
+  .ind-pop-btn span { overflow: hidden; text-overflow: ellipsis; }
+  .ind-pop-btn:hover, .ind-pop-btn[aria-expanded=true] { border-color: #c9cdd3; background: var(--surface-2); }
+  .ind-pop-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+  .ind-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; min-width: 420px; display: flex; flex-direction: column; gap: 10px; padding: 12px 14px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--sh-lg); }
+  .ind-pop[hidden] { display: none; }
+  .ind-pop-k { font-size: 11.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
+  .ind-pop .ind-champ { justify-content: space-between; gap: 14px; white-space: nowrap; }
+  .ind-pop .ind-champ .input, .ind-pop .ind-champ select.input { width: 190px; flex: none; }
+  .ind-lire { margin-left: auto; padding: 5px 10px; border: 1px solid var(--line-strong); border-radius: 15px; background: var(--surface); font-weight: 600; }
+  @media (max-width: 900px) { .sidebar { height: 100vh; } .main { height: 100vh; } }
+  .topbar .outils { gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  .topbar .topbar-sep { margin: 0 4px; }
+  .compteur { font-size: 12px; font-weight: 600; color: var(--muted); background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 3px 8px; white-space: nowrap; }
+  .aide-btn { width: 32px; padding: 6px 0; justify-content: center; font-weight: 800; border: 1px solid var(--line-strong); }
+  .topbar .marque { display: flex; align-items: center; gap: 10px; margin-right: var(--space-2); }
+  .topbar .brand-logo { height: 26px; width: auto; }
+  .topbar .field { display: flex; align-items: center; gap: 8px; }
+  .topbar .field > span { margin: 0; }
+  .btn input[type=file] { display: none; }
+  .vue { flex: 1; display: none; min-height: 0; gap: var(--space-4); padding: var(--space-4) var(--space-6); background: var(--tray); }
+  .vue.visible { display: flex; }
+  #listePhotos { width: 190px; flex: none; overflow: auto; padding: var(--space-2); }
+  #listePhotos .photo { display: flex; justify-content: space-between; gap: 6px; padding: 8px 10px; border-radius: 5px; font-size: 13px; font-weight: 500; color: #3d434c; cursor: pointer; }
+  #listePhotos .photo:hover { background: var(--surface-2); }
+  #listePhotos .photo.active { background: var(--brand-soft); color: var(--brand-ink); font-weight: 700; }
+  .visionneuse { flex: 1; min-width: 0; position: relative; overflow: hidden; padding: 0; background: #23262b; cursor: grab; }
+  .visionneuse.glisse { cursor: grabbing; }
+  .visionneuse img { position: absolute; left: 0; top: 0; max-width: none; transform-origin: 0 0; user-select: none; -webkit-user-drag: none; }
+  .visionneuse .empty { position: absolute; inset: 0; display: grid; place-items: center; color: #c9cdd3; }
+  .visionneuse .empty strong { color: #fff; }
+  .outilsPhoto { position: absolute; top: 12px; left: 12px; z-index: 2; display: flex; gap: 6px; flex-wrap: wrap; }
+  #listePhotos .photo .num { display: inline-block; min-width: 26px; color: var(--muted, #8a9099); font-variant-numeric: tabular-nums; }
+  #listePhotos .photo.active .num { color: var(--brand-ink); }
+  .numeroPhoto { position: absolute; left: 12px; bottom: 12px; z-index: 2; padding: 5px 12px; border-radius: 5px;
+    background: var(--surface); box-shadow: var(--sh-md); font-size: 14px; font-weight: 700; color: #23262b; display: none; }
+  .outilsPhoto .btn { background: var(--surface); box-shadow: var(--sh-md); }
+  .outilsPhoto .btn.actif { background: #17181a; color: #fff; }
+  .calqueMasques { position: absolute; left: 0; top: 0; transform-origin: 0 0; pointer-events: none; }
+  .calqueMasques .masque { position: absolute; background: #000; outline: 2px solid #f5a524; pointer-events: none; }
+  .calqueMasques .masque.trace { background: rgba(0,0,0,.55); outline-style: dashed; }
+  .calqueMasques .masque button { position: absolute; right: 0; top: 0; transform: scale(var(--inv, 1)); transform-origin: top right; pointer-events: auto;
+    width: 22px; height: 22px; border: 0; border-radius: 3px; background: #f5a524; color: #17181a; font-weight: 800; cursor: pointer; line-height: 1; }
+  .visionneuse.mode-masque { cursor: crosshair; }
+  .barreMasque { position: absolute; left: 12px; right: 12px; bottom: 52px; z-index: 3; display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    padding: 8px 10px; border-radius: 6px; background: rgba(23,24,26,.92); color: #fff; font-size: 12.5px; }
+  .barreMasque[hidden] { display: none; }
+  .barreMasque .aideMasque { flex: 1 1 260px; }
+  .barreMasque .btn { box-shadow: none; }
+  #listePhotos .photo .masquee { font-size: 11px; color: #f5a524; margin-left: 4px; }
+  .colonne { width: clamp(340px, 34vw, 480px); flex: none; overflow: auto; }
+  .grille2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+  #formulaire { display: flex; flex-direction: column; gap: var(--space-3); }
+  .field > span { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  #formulaire .input { min-height: 38px; padding: 8px 10px; }
+  .input.auto { background: var(--surface-2); border-style: dashed; }
+  .hint.calcul { color: var(--brand-ink); font-weight: 600; }
+  /* ── 3 · Indicateurs : barre latérale + contenu qui défile ── */
+  #vueIndicateurs { gap: var(--space-3); }
+  .nav-sous .ind-groupe { position: relative; display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; margin-left: -1px; padding: 6px 8px 6px 14px;
+    border: 0; border-left: 2px solid transparent; border-radius: 0 6px 6px 0; background: none; font: inherit; font-size: 13px; color: #5c626b; text-align: left; cursor: pointer; }
+  .nav-sous .ind-groupe:hover { background: var(--surface-2); color: var(--ink); }
+  .nav-sous .ind-groupe .nom { flex: 1; min-width: 0; font-size: 13px; font-weight: 500; color: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .nav-sous .ind-groupe.actif .nom { font-weight: 650; color: var(--noir); }
+  .nav-sous .ind-groupe .nb { flex: none; font-size: 11px; font-weight: 600; color: var(--muted-2); background: none; padding: 0; }
+  .nav-sous .ind-groupe.actif { border-left-color: var(--noir); background: var(--noir-soft); color: var(--noir); font-weight: 650; }
+  .nav-sous .ind-groupe.actif .nb { color: var(--noir); }
+  .nav-sous .ind-groupe:disabled { opacity: .45; cursor: not-allowed; }
+  .nav-sous .ind-groupe:focus-visible { outline: 2px solid var(--brand); outline-offset: -2px; }
+  .ind-calcul { display: flex; align-items: center; justify-content: center; gap: 10px; height: 240px; color: var(--muted); font-size: 13.5px; }
+  .ind-roue { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--line-strong); border-top-color: var(--brand); animation: roue .8s linear infinite; }
+  @keyframes roue { to { transform: rotate(360deg) } }
+  .ind-nav-tete { padding: 14px 14px 10px; border-bottom: 1px solid var(--line); }
+  .ind-nav-tete .card-kicker { margin: 0 0 2px; }
+  .ind-nav-tete b { display: block; font-size: 15px; }
+  .ind-maj { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: 11.5px; color: var(--muted); }
+  .ind-maj i { width: 7px; height: 7px; border-radius: 50%; background: #2e9e5b; flex: none; }
+  .ind-maj.flash i { animation: indPulse 1s ease 2; }
+  @keyframes indPulse { 50% { transform: scale(1.9); opacity: .4; } }
+  .ind-groupes { flex: 1; overflow-y: auto; padding: 8px; }
+  .ind-groupes::-webkit-scrollbar { width: 6px; } .ind-groupes::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 3px; }
+  .ind-groupe { display: grid; grid-template-columns: 32px 1fr auto; gap: 1px 10px; align-items: center; width: 100%; text-align: left;
+    font: inherit; padding: 7px 8px; border: 0; border-radius: 5px; background: none; cursor: pointer; color: var(--ink); }
+  .ind-groupe:hover { background: var(--surface-2); }
+  .ind-groupe .ico { grid-row: span 2; width: 32px; height: 32px; border-radius: 6px; display: grid; place-items: center; color: var(--ico); background: color-mix(in srgb, var(--ico) 11%, transparent); }
+  .ind-groupe .nom { font-size: 13.5px; font-weight: 650; }
+  .ind-groupe .desc { grid-column: 2 / 4; font-size: 11.5px; color: var(--muted); line-height: 1.3; }
+  .ind-groupe .nb { font-size: 11px; font-weight: 700; color: var(--muted); background: var(--surface-2); border-radius: 4px; padding: 1px 6px; }
+  .ind-groupe.actif { background: var(--brand-soft); }
+  .ind-groupe.actif .ico { background: var(--ico); color: #fff; }
+  .ind-groupe.actif .nom { color: var(--brand-ink); }
+  .ind-groupe.actif .nb { background: var(--surface); color: var(--brand-ink); }
+  .ind-groupe:disabled { opacity: .45; cursor: not-allowed; }
+  .ind-sous { list-style: none; margin: 2px 0 8px 40px; padding: 0; }
+  .ind-sous a { display: block; padding: 4px 8px; font-size: 12.5px; color: #4a5059; text-decoration: none; border-radius: 4px; line-height: 1.35; }
+  .ind-sous a:hover { background: var(--surface-2); color: var(--ink); }
+  .ind-sous a.vu { color: var(--brand-ink); font-weight: 650; background: var(--brand-soft); }
+  .ind-nav-pied { border-top: 1px solid var(--line); padding: 10px 14px; display: flex; flex-direction: column; gap: 6px; }
+  .ind-nav-pied label { display: flex; align-items: center; gap: 8px; font-size: 12.5px; cursor: pointer; }
+  .ind-droite { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+  .ind-tete { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .ind-titre { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1 1 auto; font-size: 16px; }
+  .ind-titre b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ind-titre #indPeriode { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+  .ind-titre .text-muted { font-size: 12.5px; }
+  .ind-champ { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .ind-tete-droite { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; min-width: 0; max-width: 100%; }
+  .ind-titre { flex: 1 1 260px; }
+  .ind-reglages { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 16px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+  .ind-reglages-k { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .ind-reglages .ind-champ { white-space: nowrap; }
+  .ind-droite { min-width: 0; }
+  .ind-menu-btn { max-width: min(340px, 60vw); }
+  .ind-champ .input { width: 76px; min-height: 34px; padding: 4px 8px; }
+  .ind-champ select.input { width: auto; }
+  .ind-panneau { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0; }
+  #indZone { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 14px 18px 8px; }
+  #indZone::-webkit-scrollbar { width: 8px; } #indZone::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 4px; }
+  #indZone svg { display: block; max-width: 100%; }
+  #indZone .grid { gap: 10px; }
+  #indZone .kpi { padding: 11px 13px; }
+  .ind-section { padding: 4px 0 18px; border-bottom: 1px solid var(--line); margin-bottom: 16px; scroll-margin-top: 8px; }
+  .ind-section:last-child { border-bottom: 0; margin-bottom: 0; }
+  .ind-section h5 { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin: 0 0 8px; font-size: 14.5px; font-weight: 700; color: var(--ink); }
+  .ind-section h5 small { font-size: 11.5px; font-weight: 600; color: var(--muted); }
+  .ind-section .table-wrap { max-height: 380px; overflow: auto; border: 1px solid var(--line); border-radius: 5px; }
+  .ind-section .table { font-size: 12.5px; }
+  .ind-section .table th { position: sticky; top: 0; z-index: 1; }
+  .ind-section .table td, .ind-section .table th { padding: 6px 9px; }
+  .ind-section .table td.num { white-space: nowrap; }
+  .ind-lecture { margin-top: 8px; padding: 9px 12px; border-radius: 5px; background: var(--surface-2); font-size: 12.8px; line-height: 1.5; }
+  .ind-options { display: flex; align-items: center; gap: 4px 14px; flex-wrap: wrap; margin-bottom: 8px; font-size: 12.5px; }
+  .ind-options select, .ind-options input[type=number] { min-height: 30px; padding: 3px 8px; font-size: 12.5px; width: auto; }
+  .ind-options .btn { padding: 5px 10px; }
+  .ind-case { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: #3d434c; cursor: pointer; white-space: nowrap; }
+  .ind-stats { display: flex; flex-wrap: wrap; gap: 6px 20px; padding: 2px 2px 10px; font-size: 12.5px; }
+  .ind-stats div { display: flex; flex-direction: column; } .ind-stats span { color: var(--muted); font-size: 11.5px; } .ind-stats b { font-size: 14px; font-variant-numeric: tabular-nums; }
+  .ind-bulle { position: absolute; display: none; pointer-events: none; z-index: 3; background: #17181a; color: #fff; font-size: 12px; padding: 6px 9px; border-radius: 4px; white-space: nowrap; }
+  .ind-deux { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 14px; }
+  .ind-badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 1px 7px; border-radius: 4px; white-space: nowrap; }
+  .ind-badge.oui { background: #e3f4ea; color: #1d6b3e; }
+  .ind-badge.non { background: var(--sev-1-soft); color: var(--sev-1-ink); }
+  .ind-badge.neutre { background: var(--surface-2); color: #4a5059; }
+  .num { font-variant-numeric: tabular-nums; }
+  .ind-section h5 { justify-content: space-between; }
+  .ind-agrandir { display: inline-flex; align-items: center; gap: 5px; flex: none; font: inherit; font-size: 12px; font-weight: 600; padding: 4px 9px; border-radius: 4px;
+    border: 1px solid var(--line-strong); background: var(--surface); color: #4a5059; cursor: pointer; }
+  .ind-agrandir:hover { border-color: var(--brand); color: var(--brand-ink); background: var(--brand-soft); }
+  /* Vues 3D */
+  .v3d, .v3d-scene { position: relative; }
+  .v3d canvas { width: 100%; display: block; cursor: grab; touch-action: none; border: 1px solid var(--line); border-radius: 8px;
+    background: radial-gradient(ellipse at 50% 40%, #ffffff 0%, #f6f7f9 75%, #eef0f3 100%); }
+  .v3d-outils { position: absolute; top: 10px; right: 10px; display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; max-width: 70%;
+    padding: 4px; border: 1px solid var(--line); border-radius: 8px; background: rgba(255,255,255,.88); backdrop-filter: blur(4px); }
+  .v3d-btn { font: inherit; font-size: 12px; font-weight: 600; padding: 5px 9px; border: 0; border-radius: 5px; background: none; color: #4a5059; cursor: pointer; white-space: nowrap; }
+  .v3d-btn:hover { background: var(--surface-2); color: var(--ink); }
+  .v3d-btn[aria-pressed=true] { background: var(--brand-soft); color: var(--brand-ink); }
+  .v3d-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 1px; }
+  .v3d-sep { width: 1px; align-self: stretch; margin: 2px 2px; background: var(--line); }
+  .v3d-aide { position: absolute; left: 12px; bottom: 10px; font-size: 11.5px; color: var(--muted); pointer-events: none; }
+  .v3d-legende { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .v3d-legende button { display: inline-flex; align-items: center; gap: 7px; font: inherit; font-size: 12.5px; font-weight: 600; padding: 5px 11px 5px 9px;
+    border: 1px solid var(--line-strong); border-radius: 15px; background: var(--surface); color: #3d434c; cursor: pointer; }
+  .v3d-legende button:hover { border-color: #c9cdd3; background: var(--surface-2); }
+  .v3d-legende button i { width: 11px; height: 11px; border-radius: 50%; flex: none; }
+  .v3d-legende button small { font-size: 11px; font-weight: 600; color: var(--muted); }
+  .v3d-legende button.eteint { opacity: .45; }
+  .v3d-resume { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px 24px; margin-top: 12px; padding: 12px 14px;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--surface); font-size: 13px; line-height: 1.5; }
+  .v3d-resume-k { font-size: 11.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+  .v3d-resume ul { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 4px; }
+  .v3d-groupes { list-style: none; padding-left: 0 !important; }
+  .v3d-groupes i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; }
+  /* Avertissements et remarques : deux boutons discrets ; le détail s'ouvre dans un panneau à droite. */
+  .ind-notes { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 2px; }
+  .ind-note-btn { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 9px 0 11px; font: inherit; font-size: 12.5px; font-weight: 600;
+    color: #3d434c; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 15px; cursor: pointer; }
+  .ind-note-btn:hover { background: var(--surface-2); border-color: #c9cdd3; }
+  .ind-note-btn:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  .ind-note-btn.avert svg { color: var(--sev-2); } .ind-note-btn.avert.crit svg { color: var(--sev-1); } .ind-note-btn.rem svg { color: var(--brand-ink); }
+  .ind-note-btn .nb { display: inline-grid; place-items: center; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 10px; font-size: 11px; font-weight: 700; color: #fff; }
+  .ind-note-btn.avert .nb { background: var(--sev-2); } .ind-note-btn.avert.crit .nb { background: var(--sev-1); } .ind-note-btn.rem .nb { background: var(--brand); }
+  #indNotesFond { position: fixed; inset: 0; background: rgba(16,24,40,.28); z-index: 70; }
+  #indNotes { position: fixed; top: 0; right: 0; bottom: 0; width: min(460px, 100vw); z-index: 71; display: flex; flex-direction: column;
+    background: var(--surface); border-left: 1px solid var(--line); box-shadow: var(--sh-lg); animation: notesEntree .16s ease-out; }
+  @keyframes notesEntree { from { transform: translateX(24px); opacity: 0 } to { transform: none; opacity: 1 } }
+  @media (prefers-reduced-motion: reduce) { #indNotes { animation: none; } }
+  #indNotes header { display: flex; align-items: center; gap: 10px; padding: 14px 12px 10px 16px; border-bottom: 1px solid var(--line); }
+  #indNotes header b { flex: 1; min-width: 0; font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #indNotes .onglets { display: flex; gap: 4px; padding: 6px 16px 0; border-bottom: 1px solid var(--line); }
+  #indNotes .onglets button { font: inherit; font-size: 12.5px; font-weight: 600; padding: 7px 10px; margin-bottom: -1px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); cursor: pointer; }
+  #indNotes .onglets button[aria-selected=true] { color: var(--ink); border-bottom-color: var(--brand-ink); }
+  #indNotes .liste { flex: 1; overflow: auto; padding: 14px 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+  #indNotes .note { padding: 10px 12px; border: 1px solid var(--line); border-radius: 5px; font-size: 13px; line-height: 1.55; color: var(--text); background: var(--surface); }
+  #indNotes .fermer { width: 32px; height: 32px; flex: none; border: 0; border-radius: 4px; background: none; font-size: 22px; line-height: 1; color: var(--muted); cursor: pointer; }
+  #indNotes .fermer:hover { background: var(--surface-2); color: var(--ink); }
+  #indModal { position: fixed; inset: 0; background: rgba(16,24,40,.5); display: none; place-items: center; z-index: 60; padding: 18px; }
+  #indModal.visible { display: grid; }
+  #indModal > .panel { width: min(1500px, 97vw); height: 94vh; display: flex; flex-direction: column; }
+  #indModalCorps { flex: 1; min-height: 0; overflow: auto; padding-right: 6px; }
+  #indModalCorps .ind-section { border-bottom: 0; margin-bottom: 0; }
+  #indModalCorps .table-wrap { max-height: none; }
+  #sauvegarde { position: fixed; inset: 0; background: rgba(16,24,40,.5); display: none; place-items: center; z-index: 55; padding: 18px; }
+  #sauvegarde.visible { display: grid; }
+  #sauvegarde > .panel { width: min(980px, 96vw); max-height: 94vh; overflow: auto; }
+  .sauv-grille { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+  .sauv-carte { border: 1px solid var(--line); border-radius: 6px; padding: 14px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+  .sauv-carte:last-child { grid-column: 1 / -1; }
+  .sauv-carte p { margin: 0; font-size: 13px; line-height: 1.5; color: #3d434c; }
+  .sauv-carte .card-kicker { display: flex; align-items: center; gap: 8px; margin: 0; }
+  #sauvApercu { width: 100%; }
+  @media (max-width: 760px) { .sauv-grille { grid-template-columns: 1fr; } }
+  .ind-bulle-globale { position: fixed; z-index: 100; display: none; pointer-events: none; min-width: 120px; max-width: 360px; padding: 8px 10px; border-radius: 5px;
+    background: #17181a; color: #fff; font-size: 12.5px; line-height: 1.45; box-shadow: 0 8px 24px rgba(16,24,40,.25); }
+  .ind-bulle-globale .t { font-weight: 700; margin-bottom: 3px; color: #c9d6ff; }
+  .ind-bulle-globale .l { display: flex; align-items: center; gap: 6px; white-space: normal; }
+  .ind-bulle-globale .l i { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+  .ind-bulle-globale b { font-variant-numeric: tabular-nums; }
+  svg .a-info { cursor: crosshair; transition: opacity .1s; }
+  svg rect.a-info.survole, svg path.a-info.survole { opacity: .75; stroke: #17181a; stroke-width: 1.5; }
+  svg circle.a-info.survole { stroke: #17181a; stroke-width: 2; fill-opacity: 1; }
+  .survol-zone { cursor: crosshair; }
+  .ind-tabs { flex: none; display: flex; flex-wrap: wrap; gap: 0 2px; padding: 2px 12px 0; border-bottom: 1px solid var(--line); }
+  .ind-tabs::-webkit-scrollbar { height: 5px; } .ind-tabs::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 3px; }
+  .ind-tabs button { display: inline-flex; align-items: center; gap: 6px; flex: none; font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap;
+    padding: 9px 11px 7px; border: 0; border-bottom: 2.5px solid transparent; margin-bottom: -1px; background: none; color: #5a606a; cursor: pointer; }
+  .ind-tabs button:hover { color: var(--ink); background: var(--surface-2); }
+  .ind-tabs button.actif { color: var(--brand-ink); border-bottom-color: var(--brand-ink); }
+  .ind-tabs button.vu:not(.actif) { color: var(--ink); border-bottom-color: #c9ccd2; }
+  .ind-tabs .nb { font-size: 10.5px; font-weight: 700; min-width: 18px; text-align: center; padding: 1px 5px; border-radius: 3px; background: var(--surface-2); color: var(--muted); }
+  .ind-tabs button.actif .nb { background: var(--brand); color: #fff; }
+  .ind-suite { display: flex; justify-content: space-between; gap: 10px; padding: 4px 0 12px; }
+  .ind-legende { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 6px 0 2px; font-size: 12px; color: #3d434c; }
+  .ind-legende span { display: inline-flex; align-items: center; gap: 6px; }
+  .ind-legende i { display: inline-block; flex: none; }
+  .ind-legende .boite { width: 18px; height: 11px; border: 1.6px solid #0055f7; background: rgba(0,85,247,.22); border-radius: 2px; }
+  .ind-legende .med { width: 3px; height: 14px; background: #0055f7; }
+  .ind-legende .moy { width: 9px; height: 9px; background: #d7263d; transform: rotate(45deg); }
+  .ind-legende .moust { width: 18px; height: 10px; border-left: 1.6px solid #3d434c; border-right: 1.6px solid #3d434c; background: linear-gradient(#3d434c, #3d434c) center / 100% 1.6px no-repeat; }
+  .ind-legende .atyp { width: 9px; height: 9px; border: 1.8px solid #e07b00; border-radius: 50%; }
+  .ind-filtre { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .ind-filtre-k { color: #3d434c; }
+  .ind-filtre-groupe { display: inline-flex; align-items: stretch; padding: 3px; gap: 2px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; }
+  .ind-fleche { font: inherit; font-size: 17px; line-height: 1; font-weight: 700; width: 28px; border: 0; border-radius: 4px; background: none; color: #3d434c; cursor: pointer; }
+  .ind-fleche:hover:not(:disabled) { background: var(--surface); color: var(--brand-ink); }
+  .ind-fleche:disabled { opacity: .3; cursor: default; }
+  .ind-menu { position: relative; }
+  .ind-menu-btn { display: inline-flex; align-items: center; gap: 8px; height: 100%; min-height: 30px; max-width: 340px; font: inherit; font-size: 13px; font-weight: 600; padding: 4px 10px;
+    border: 0; border-radius: 4px; background: var(--surface); color: var(--brand-ink); cursor: pointer; box-shadow: 0 1px 2px rgba(16,24,40,.08); }
+  .ind-menu-btn .txt { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ind-menu-btn svg { flex: none; }
+  .ind-filtre .nb { flex: none; font-size: 10.5px; font-weight: 700; min-width: 18px; text-align: center; padding: 1px 5px; border-radius: 3px; background: var(--brand); color: #fff; }
+  .ind-menu-liste { position: absolute; right: 0; top: calc(100% + 6px); z-index: 45; width: 400px; max-height: 62vh; overflow-y: auto; padding: 6px;
+    background: var(--surface); border: 1px solid var(--line-strong); border-radius: 6px; box-shadow: 0 12px 32px rgba(16,24,40,.18); }
+  .ind-menu-liste button { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; font: inherit; font-size: 13px; padding: 8px 9px; border: 0; border-radius: 4px; background: none; color: #17181a; cursor: pointer; line-height: 1.3; }
+  .ind-menu-liste button .nb { background: var(--surface-2); color: #4a5059; }
+  .ind-menu-liste button small { color: var(--muted); font-size: 11.5px; }
+  .ind-menu-liste button:hover { background: var(--surface-2); }
+  .ind-menu-liste button.actif { background: var(--brand-soft); color: var(--brand-ink); font-weight: 650; }
+  .ind-menu-liste button.actif .nb { background: var(--brand); color: #fff; }
+  .ind-menu-liste button.vu:not(.actif) { box-shadow: inset 0 0 0 1px #c9ccd2; }
+  .ind-vide { padding: 30px; text-align: center; color: var(--muted); }
+  .ind-attente { display: flex; align-items: center; gap: 10px; padding: 18px; color: var(--muted); font-size: 13px; }
+  .raccourcis { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
+  .raccourcis button { font: inherit; font-size: 11.5px; font-weight: 700; padding: 2px 8px; border-radius: 4px;
+    border: 1px solid var(--line-strong); background: var(--surface); color: #3d434c; cursor: pointer; }
+  .raccourcis button small { font-size: 9.5px; font-weight: 600; color: var(--muted, #8a9099); margin-right: 4px; }
+  .raccourcis button:hover { border-color: var(--brand); color: var(--brand-ink); background: var(--brand-soft); }
+  .lexique { display: grid; grid-template-columns: 70px 1fr; gap: 4px 12px; font-size: 13.5px; }
+  .input.douteux { background: var(--sev-3-soft); border-color: var(--sev-3); }
+  .input.epinglee { border-color: var(--brand-soft-2); background: var(--brand-soft); }
+  .garder { display: inline-flex; align-items: center; gap: 4px; font: inherit; font-size: 11.5px; font-weight: 600;
+    padding: 2px 8px; border-radius: 4px; border: 1px solid var(--line-strong); background: var(--surface);
+    color: var(--muted); cursor: pointer; white-space: nowrap; }
+  .garder:hover { color: var(--brand-ink); border-color: #c9ccd2; }
+  .garder.active { background: var(--brand-soft); border-color: #c9ccd2; color: var(--brand-ink); }
+  #bandeauGardes { display: none; margin-bottom: var(--space-3); padding: 10px 12px; border-radius: var(--r-md);
+    background: var(--brand-soft); color: var(--brand-ink); font-size: 13px; }
+  #bandeauGardes.visible { display: block; }
+  #bandeauGardes .valeurs { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+  #bandeauGardes .valeurs span { background: var(--surface); border-radius: 4px; padding: 2px 9px; font-weight: 600; }
+  .table tbody tr { cursor: pointer; }
+  .table td.actions { width: 1%; white-space: nowrap; text-align: right; }
+  .corbeille { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 4px; border-radius: 4px; display: inline-grid; }
+  .corbeille:hover { color: var(--sev-1-ink); background: var(--sev-1-soft); }
+  .table tr.selection td { background: var(--brand-soft); }
+  .table td, .table th { padding: 8px 10px; }
+  kbd { font: inherit; font-size: 11.5px; font-weight: 600; border: 1px solid var(--line-strong); border-radius: 3px; padding: 0 5px; background: var(--surface-2); }
+  .etapes { display: flex; flex-direction: column; gap: 10px; margin: 0; padding: 0; list-style: none; counter-reset: e; }
+  .etapes li { display: grid; grid-template-columns: 26px 1fr; gap: 10px; font-size: 13.5px; }
+  .etapes li::before { counter-increment: e; content: counter(e); width: 26px; height: 26px; border-radius: 50%; background: var(--brand-soft); color: var(--brand-ink); font-weight: 700; display: grid; place-items: center; font-size: 13px; }
+  .controle { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; padding: 8px 10px; border-radius: 5px; border: 1px solid var(--line); margin-bottom: 6px; }
+  .controle .valeur { font-weight: 700; font-size: 14px; }
+  .controle.faux { border-color: var(--sev-1); background: var(--sev-1-soft); }
+  .controle .lib { font-size: 12px; color: var(--muted); }
+  .resultat { display: grid; grid-template-columns: 1fr 120px 56px; gap: 10px; align-items: center; padding: 5px 0; font-size: 13px; }
+  #aide { position: fixed; inset: 0; background: rgba(16,24,40,.45); display: none; place-items: center; z-index: 50; padding: 20px; }
+  #aide.visible { display: grid; }
+  #aide .panel { max-width: 720px; max-height: 90vh; overflow: auto; }
+  #apercu { position: fixed; inset: 0; background: rgba(16,24,40,.45); display: none; place-items: center; z-index: 50; padding: 20px; }
+  #apercu.visible { display: grid; }
+  #apercu .panel { width: min(1500px, 96vw); height: 90vh; display: flex; flex-direction: column; }
+  #apercu .defile { flex: 1; overflow: auto; border: 1px solid var(--line); border-radius: var(--r-md); }
+  #apercu table { font-size: 12.5px; }
+  #apercu th { position: sticky; top: 0; z-index: 1; }
+  #apercu td { white-space: nowrap; max-width: 260px; overflow: hidden; text-overflow: ellipsis; padding: 6px 9px; }
+  #apercu td.douteux { background: var(--sev-3-soft); }
+  #apercu td[data-k] { cursor: text; }
+  #apercu td[data-k]:hover { box-shadow: inset 0 0 0 1px var(--brand-300, #9db4f0); }
+  #apercu td.en-edition { padding: 0; overflow: visible; }
+  #apercu td.en-edition input { width: 100%; min-width: 140px; height: 30px; border: 2px solid var(--brand-600, #0055f7); border-radius: 4px; padding: 3px 7px; font: inherit; }
+  #apercu td.en-edition input.invalid { border-color: var(--sev-1-ink, #d7263d); }
+  #apercu td.modifiee { background: var(--sev-4-soft, #e6f6ec); }
+  #apercu .ouvrir-ligne { border: 0; background: none; cursor: pointer; color: var(--ink-3, #5a606a); padding: 2px 4px; }
+  #apercuEtat { font-size: 12.5px; min-height: 18px; margin: 0 0 6px; }
+  #apercu .stats { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: var(--space-3); }
+</style>
+</head>
+<body>
+<div class="shell" id="shell">
+<aside class="sidebar" id="sidebar" aria-label="Navigation principale">
+  <div class="sidebar-top">
+    <img class="brand-logo" src="assets/logo-na.png" alt="Logo">
+    <span class="brand-text">NERA</span>
+    <button type="button" class="collapse-btn" id="reduireSidebar" title="Réduire la barre latérale" aria-label="Réduire la barre latérale" aria-expanded="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18M15 9l-3 3 3 3"/></svg></button>
+  </div>
+  <nav>
+    <div class="nav-group">
+      <h6>Travail</h6>
+      <label class="nav-link" title="Saisie"><input type="radio" name="onglet" value="saisie" checked><svg class="nav-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg><span>Saisie</span><span class="nav-count" id="navLignes"></span></label>
+      <label class="nav-link" title="Contrôle qualité"><input type="radio" name="onglet" value="controle"><svg class="nav-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span>Contrôle qualité</span></label>
+      <label class="nav-link nav-parent" title="Indicateurs"><input type="radio" name="onglet" value="indicateurs"><svg class="nav-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M8 17v-4M13 17V8M18 17v-6"/></svg><span>Indicateurs</span><svg class="nav-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></label>
+      <div class="nav-sous" id="indNav" aria-label="Rubriques des indicateurs"></div>
+    </div>
+    <div class="nav-group">
+      <h6>Données</h6>
+      <label class="nav-link" title="Ouvrir les photos"><svg class="nav-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg><span>Ouvrir les photos</span><input id="fichiersPhotos" type="file" accept="image/jpeg,image/png" multiple></label>
+      <button type="button" class="nav-link" id="ouvrirApercu" title="Aperçu des lignes"><svg class="nav-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg><span>Aperçu des lignes</span></button>
+      <button type="button" class="nav-link" id="ouvrirAide" title="Comment ça marche ?"><svg class="nav-ico" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 3-3 3M12 17h.01"/></svg><span>Aide</span></button>
+    </div>
+  </nav>
+  <div class="carte-sauv">
+    <div class="carte-sauv-tete"><span class="carte-sauv-ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg></span><b>Sauvegarde</b></div>
+    <p id="sauvResume">Exportez une copie de vos lignes après chaque séance.</p>
+    <button type="button" id="ouvrirSauvegarde" class="btn btn-sm" title="Exporter, sauvegarder, restaurer vos données"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg><span>Sauvegarder</span></button>
+  </div>
+</aside>
+<div class="scrim" id="scrim"></div>
+<div class="main">
+<header class="topbar">
+  <button type="button" class="icon-btn burger" id="ouvrirSidebar" aria-label="Ouvrir le menu"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+  <div class="ind-titre topbar-ind" id="topbarInd" hidden><b id="indTitre">Indicateurs</b><span id="indPeriode" class="text-muted"></span></div>
+  <div class="spacer"></div>
+  <label class="field"><span>Service</span>
+    <select id="service" class="input" style="width:auto;min-height:36px"></select></label>
+  <span id="compteur" class="compteur"></span>
+</header>
+
+<!-- ── 1 · Saisie ─────────────────────────────────────────── -->
+<main id="vueSaisie" class="vue visible">
+  <section class="panel" id="listePhotos"></section>
+  <section class="panel visionneuse" id="visionneuseSaisie">
+    <div class="outilsPhoto">
+      <button class="btn btn-sm" data-action="tournerG" title="Pivoter à gauche">⟲</button>
+      <button class="btn btn-sm" data-action="tournerD" title="Pivoter à droite">⟳</button>
+      <button class="btn btn-sm" data-action="plus" title="Zoomer">＋</button>
+      <button class="btn btn-sm" data-action="moins" title="Dézoomer">－</button>
+      <button class="btn btn-sm" data-action="ajuster">Ajuster</button>
+      <button class="btn btn-sm" data-action="contraste">Contraste</button>
+      <button class="btn btn-sm" data-action="suivante">Photo suivante ›</button>
+          <button class="btn btn-sm" data-action="masquer" title="Cacher les noms et les téléphones sur la photo">■ Masquer</button>
+    </div>
+    <div class="barreMasque" hidden>
+      <span class="aideMasque">Tracez un rectangle sur chaque <b>nom</b> et chaque <b>téléphone</b> (cliquer-glisser). × pour retirer un masque.</span>
+      <button class="btn btn-sm" data-masque="precedente" title="Recopier les masques de la photo précédente (même mise en page)">Reprendre la photo précédente</button>
+      <button class="btn btn-sm" data-masque="effacer">Effacer les masques</button>
+      <button class="btn btn-sm btn-primary" data-masque="enregistrer">Enregistrer cette photo masquée</button>
+      <button class="btn btn-sm btn-primary" data-masque="toutes">Enregistrer toutes les photos masquées</button>
+    </div>
+    <img alt="">
+    <div class="empty"><div><strong>Aucune photo ouverte</strong>
+      Cliquez sur « Ouvrir les photos » et choisissez les photos converties du service.<br>
+      Molette : zoom · glisser : déplacer · tout reste sur cet ordinateur.</div></div>
+  </section>
+  <section class="panel colonne">
+    <div class="card-kicker" id="kickerLigne">Ligne du registre</div>
+    <h4 id="titreLigne">Nouvelle ligne</h4>
+    <div id="msg"></div>
+    <div id="bandeauGardes" aria-live="polite"></div>
+    <form id="formulaire" autocomplete="off"></form>
+    <div class="row" style="margin:var(--space-4) 0">
+      <button id="enregistrer" class="btn btn-primary" title="Ctrl + Entrée">Enregistrer la ligne</button>
+      <button id="nouvelle" class="btn btn-secondary" title="Échap">Nouvelle ligne</button>
+      <button id="supprimer" class="btn btn-ghost" style="color:var(--sev-1-ink)" disabled>Supprimer</button>
+      <button id="lignePrecedenteEd" class="btn btn-secondary" title="Enregistrer puis ouvrir la ligne précédente (Alt + ↑)" hidden>‹ Précédente</button>
+      <button id="ligneSuivanteEd" class="btn btn-primary" title="Enregistrer puis ouvrir la ligne suivante (Alt + ↓)" hidden>Enregistrer et ligne suivante ›</button>
+      <span id="positionEd" class="text-muted" style="font-size:12.5px;align-self:center"></span>
+    </div>
+    <div class="ind-notes" style="margin-top:0"><button type="button" class="ind-note-btn rem" id="aideSaisieBtn" aria-haspopup="dialog"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>Règles et raccourcis de saisie</button></div>
+    <div id="aideSaisie" hidden>
+      Recopiez <b>exactement</b> ce qui est écrit (« APG » reste « APG »). Case illisible : tapez <b>?</b>.
+      Case vide dans le registre : laissez vide.<br>
+      <kbd>Entrée</kbd> champ suivant · <kbd>Ctrl</kbd>+<kbd>Entrée</kbd> enregistrer · <kbd>Ctrl</kbd>+<kbd>D</kbd> recopier
+      la ligne précédente · <kbd>Alt</kbd>+<kbd>1</kbd>…<kbd>9</kbd> ajoute le terme rapide n° 1…9 de la case.<br>
+      Bouton <b>Garder</b> à côté d’un champ : sa valeur est reprise sur les lignes suivantes (une même date pour toute la page, par exemple).
+      Pour corriger une ligne déjà enregistrée, cliquez dessus dans le tableau en bas ; pour la supprimer, cliquez sur la corbeille.<br>
+      <kbd>Entrée</kbd> saute les champs gardés et les champs recopiés (pointillés) : cliquez dessus pour les modifier.
+      La date de sortie absente du registre n’est pas à taper : elle est calculée à l’import.
+    </div>
+    <div class="card-kicker" style="margin-top:var(--space-4);display:flex;justify-content:space-between;align-items:center">
+      <span>Lignes de cette photo</span><span id="compteurPhoto"></span></div>
+    <div class="table-wrap"><table class="table"><thead id="enteteTableau"></thead><tbody id="lignesPhoto"></tbody></table></div>
+  </section>
+</main>
+
+<!-- ── 3 · Indicateurs (calculés sur les lignes saisies) ────── -->
+<main id="vueIndicateurs" class="vue" style="overflow:hidden">
+  <div class="ind-droite">
+    <div class="ind-tete">
+      <div class="ind-tete-droite">
+        <div class="ind-filtre" id="indFiltre"></div>
+        <label class="ind-par" title="Regroupement des indicateurs par période"><span>Par</span>
+          <select id="indParChoix" class="input"><option value="jour">jour</option><option value="semaine">semaine</option><option value="mois" selected>mois</option><option value="annee">année</option></select></label>
+        <div class="seg" hidden>
+          <label class="seg-opt"><input type="radio" name="indPar" value="jour">Par jour</label>
+          <label class="seg-opt"><input type="radio" name="indPar" value="semaine">Par semaine</label>
+          <label class="seg-opt"><input type="radio" name="indPar" value="mois" checked>Par mois</label>
+          <label class="seg-opt"><input type="radio" name="indPar" value="annee">Par année</label>
+        </div>
+        <div class="ind-pop-zone">
+          <button type="button" class="ind-pop-btn" id="btnCalcul" aria-haspopup="dialog" aria-expanded="false" title="Réglages du calcul de l’occupation"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg><span id="resumeCalcul">Calcul</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+          <div class="ind-pop" id="popCalcul" role="dialog" aria-label="Réglages du calcul de l'occupation" hidden>
+            <div class="ind-pop-k">Calcul de l’occupation</div>
+            <label class="ind-champ">Lits du service <input id="indLits" class="input" type="number" min="1"></label>
+            <label class="ind-champ" title="Part minimale de séjours de durée connue exigée dans chaque mois de la période calculée (90 % dans NERA)">Durées connues ≥
+              <select id="indSeuil" class="input"><option value="0.9">90 %</option><option value="0.8">80 %</option><option value="0.7">70 %</option><option value="0.5">50 %</option></select></label>
+            <label class="ind-champ" title="Que faire d'un séjour sans date de sortie ni nombre de jours ?">Durée inconnue
+              <select id="indInconnues" class="input"><option value="exclure">exclue</option><option value="estimee">estimée (prix, issue)</option><option value="mediane">= durée médiane</option></select></label>
+            <label class="ind-champ" title="Un enfant sans sortie est compté « encore hospitalisé » jusqu'à la fin de la saisie s'il est entré depuis moins de…">Encore hospitalisé si entré depuis &lt;
+              <select id="indCensure" class="input"><option value="fixe">30 jours</option><option value="p95">p95 des séjours</option></select></label>
+          </div>
+        </div>
+        <div class="ind-pop-zone">
+          <button type="button" class="ind-pop-btn" id="btnAffichage" aria-haspopup="dialog" aria-expanded="false" title="Explications et vues 3D"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg><span>Affichage</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+          <div class="ind-pop" id="popAffichage" role="dialog" aria-label="Affichage" hidden>
+            <div class="ind-pop-k">Affichage</div>
+            <label class="ind-case" title="Afficher sous chaque statistique l’encadré « Comment lire »"><input type="checkbox" id="indAide">Explications « Comment lire »</label>
+            <label class="ind-case" title="Afficher ou masquer les vues en trois dimensions (ACP, nuage de points, régression)"><input type="checkbox" id="ind3D">Vues 3D</label>
+          </div>
+        </div>
+      </div>
+    </div>
+    <section class="panel ind-panneau"><div id="indZone"></div></section>
+  </div>
+</main>
+
+<!-- ── 2 · Contrôle qualité ───────────────────────────────── -->
+<main id="vueControle" class="vue">
+  <section class="panel visionneuse" id="visionneuseControle">
+    <div class="outilsPhoto">
+      <button class="btn btn-sm" data-action="tournerG">⟲</button>
+      <button class="btn btn-sm" data-action="tournerD">⟳</button>
+      <button class="btn btn-sm" data-action="plus">＋</button>
+      <button class="btn btn-sm" data-action="moins">－</button>
+      <button class="btn btn-sm" data-action="ajuster">Ajuster</button>
+      <button class="btn btn-sm" data-action="contraste">Contraste</button>
+    </div>
+    <img alt="">
+    <div class="empty"><div><strong>La photo de la ligne s’affichera ici</strong>
+      Tirez d’abord l’échantillon. Les photos doivent être ouvertes (bouton « Ouvrir les photos »).</div></div>
+  </section>
+  <section class="panel colonne" id="panneauControle"></section>
+</main>
+
+</div><!-- .main -->
+</div><!-- .shell -->
+
+<!-- ── Sauvegarde, export et restauration ───────────────── -->
+<div id="sauvegarde" role="dialog" aria-modal="true">
+  <section class="panel">
+    <div class="panel-head">
+      <div><div class="card-kicker">Vos données</div><h4>Sauvegarder, exporter, restaurer</h4></div>
+      <button class="btn btn-secondary btn-sm spacer" id="fermerSauvegarde">Fermer</button>
+    </div>
+    <div id="sauvEtat"></div>
+    <div class="sauv-grille">
+      <div class="sauv-carte">
+        <div class="card-kicker">1 · Sauvegarde complète <span class="ind-badge oui">recommandé</span></div>
+        <p>Un seul fichier <b>.json</b> avec <b>toutes</b> vos lignes de <b>tous</b> les services et tout le contexte de l’outil :
+          nombre de lits, champs gardés, contrôles qualité, réglages des indicateurs. À faire à la fin de chaque séance et à copier sur une clé USB.</p>
+        <button class="btn btn-primary" id="exporterTout">Télécharger la sauvegarde complète</button>
+      </div>
+      <div class="sauv-carte">
+        <div class="card-kicker">2 · Restaurer une sauvegarde</div>
+        <p>Après un problème (navigateur vidé, autre ordinateur), choisissez le fichier <b>.json</b> : toutes vos lignes reviennent
+          et <b>toutes les statistiques sont recalculées</b> automatiquement.</p>
+        <label class="btn btn-secondary">Choisir une sauvegarde (.json)<input id="restaurer" type="file" accept=".json,application/json"></label>
+        <div id="sauvApercu"></div>
+      </div>
+      <div class="sauv-carte">
+        <div class="card-kicker">3 · Fichiers CSV (pour Excel et l’application NERA)</div>
+        <p>Le CSV contient les lignes d’un service, colonne par colonne. C’est le fichier à importer dans NERA.</p>
+        <div class="row" style="gap:8px;flex-wrap:wrap">
+          <button id="exporter" class="btn btn-secondary">CSV du service affiché</button>
+          <button id="exporterCsvTous" class="btn btn-secondary">CSV de tous les services</button>
+          <label class="btn btn-secondary">Reprendre un CSV<input id="importer" type="file" accept=".csv"></label>
+        </div>
+      </div>
+    </div>
+    <p class="text-muted" style="font-size:12.5px;margin:12px 0 0">Les <b>photos</b> ne sont pas dans la sauvegarde (trop lourdes, et elles sont déjà sur votre ordinateur) :
+      chaque ligne garde le nom de sa photo ; rouvrez simplement le dossier de photos avec « Ouvrir les photos ». Rien n’est envoyé sur Internet.</p>
+  </section>
+</div>
+
+<!-- ── Une statistique en grand ─────────────────────────── -->
+<div id="indModal" role="dialog" aria-modal="true">
+  <section class="panel">
+    <div class="panel-head">
+      <div><div class="card-kicker" id="indModalKicker"></div><h4 id="indModalTitre"></h4></div>
+      <div class="spacer row">
+        <button class="btn btn-secondary btn-sm" id="indModalPrec" title="Section précédente (←)">‹ Précédente</button>
+        <button class="btn btn-secondary btn-sm" id="indModalSuiv" title="Section suivante (→)">Suivante ›</button>
+        <button class="btn btn-primary btn-sm" id="indModalFermer" title="Échap">Fermer</button>
+      </div>
+    </div>
+    <div id="indModalCorps"></div>
+  </section>
+</div>
+
+<!-- ── Aperçu des lignes saisies ─────────────────────────── -->
+<div id="apercu" role="dialog" aria-modal="true">
+  <section class="panel">
+    <div class="panel-head">
+      <div><div class="card-kicker" id="apercuKicker">Aperçu</div><h4>Lignes saisies — telles qu’elles seront exportées</h4></div>
+      <div class="spacer row">
+        <select id="apercuMois" class="input" style="width:auto;min-height:36px" title="N'afficher que les lignes d'un mois (date d'enregistrement, sinon date d'entrée)"></select>
+        <input id="apercuRecherche" class="input" placeholder="Rechercher (diagnostic, date, quartier…)" style="width:280px;min-height:36px">
+        <button class="btn btn-secondary btn-sm" id="exporterMois" title="Télécharger en CSV les lignes affichées (mois choisi)">Exporter ce mois</button>
+        <button class="btn btn-secondary btn-sm" id="fermerApercu">Fermer</button>
+      </div>
+    </div>
+    <div class="stats" id="apercuStats"></div>
+    <div id="apercuEtat" class="text-muted"></div>
+    <div class="defile"><table class="table"><thead id="apercuEntete"></thead><tbody id="apercuCorps"></tbody></table></div>
+    <p class="text-muted" style="font-size:12.5px;margin:8px 0 0"><b>Cliquez sur une case pour la modifier directement</b> :
+      Entrée enregistre et descend d’une ligne · Tab passe à la case suivante (Maj + Tab : précédente) · Échap annule ·
+      ✎ ouvre la ligne entière dans le formulaire · corbeille pour la supprimer · en jaune : cases marquées « ? » ; en vert : modifiées ici.</p>
+  </section>
+</div>
+
+<!-- ── Aide ───────────────────────────────────────────────── -->
+<div id="aide" role="dialog" aria-modal="true">
+  <section class="panel">
+    <div class="panel-head"><h4>Comment ça marche ?</h4>
+      <button class="btn btn-secondary btn-sm spacer" id="fermerAide">Fermer</button></div>
+    <div class="card-kicker">Avant de commencer</div>
+    <ol class="etapes" style="margin-bottom:var(--space-4)">
+      <li><span>Convertissez les photos d’un service avec <b>convertir_photos.bat</b> (une seule fois).</span></li>
+      <li><span>Choisissez le <b>service</b> en haut : le formulaire affiche les colonnes de son registre.</span></li>
+      <li><span>Cliquez sur <b>Ouvrir les photos</b> et sélectionnez toutes les photos converties de ce service.</span></li>
+    </ol>
+    <div class="card-kicker">1 · Saisie</div>
+    <ol class="etapes" style="margin-bottom:var(--space-4)">
+      <li><span>Pour chaque ligne du registre visible sur la photo, remplissez le formulaire à droite et enregistrez
+        (<kbd>Ctrl</kbd>+<kbd>Entrée</kbd>). Le N° d’ordre suivant se met tout seul.</span></li>
+      <li><span>Quand une valeur est la même sur toute la page (la date, « N »…), cliquez sur <b>Garder</b> à côté du champ :
+        elle sera reprise sur les lignes suivantes. Le bandeau bleu au-dessus du formulaire rappelle les valeurs gardées.</span></li>
+      <li><span>Rien n’est envoyé sur Internet. Les lignes sont gardées dans ce navigateur, mais <b>exportez le CSV à la fin
+        de chaque séance</b> : c’est votre vraie sauvegarde, et c’est ce fichier que vous importerez dans l’application.</span></li>
+    </ol>
+    <div class="card-kicker">Abréviations fréquentes</div>
+    <div class="lexique" id="lexique" style="margin-bottom:var(--space-4)"></div>
+    <div class="card-kicker">2 · Contrôle qualité — à quoi ça sert ?</div>
+    <p style="font-size:13.5px">Quand on recopie des centaines de lignes à la main, on fait forcément quelques erreurs
+      (un 3 lu comme un 8, une date inversée). Le contrôle qualité <b>mesure</b> ces erreurs : l’outil tire au hasard
+      une partie des lignes déjà saisies, vous les comparez à la photo, et il calcule le <b>taux d’erreur de saisie</b>
+      par colonne. Ce chiffre va dans le mémoire et prouve que votre dataset est fiable. Si une colonne a beaucoup
+      d’erreurs, revérifiez-la en entier.</p>
+    <p class="text-muted" style="font-size:12.5px;margin:0">À faire une fois la saisie d’un service terminée (ou à mi-parcours).</p>
+  </section>
+</div>
+
+<script src="registres.js?v=33"></script>
+<script>
+// ── Utilitaires ──────────────────────────────────────────────
+const $ = (s) => document.querySelector(s)
+const echapper = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
+const RE_DATE = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2}|\d{4})$/
+/**
+ * Message d'erreur d'une date, ou '' si elle est correcte.
+ * fin = false pendant la frappe : on ne signale que l'impossible (jour 32, mois 13) ;
+ * fin = true en quittant le champ ou en enregistrant : la date doit être complète.
+ */
+function erreurDate(v, fin) {
+  if (!v || v.includes('?') || v === '=') return ''
+  if (/[^\d/]/.test(v)) return 'Seuls les chiffres sont acceptés : jj/mm/aa.'
+  const [j, m, a] = v.split('/')
+  if (j?.length === 2 && (+j < 1 || +j > 31)) return `Jour impossible : ${j}. Le jour va de 01 à 31.`
+  if (m?.length === 2 && (+m < 1 || +m > 12)) return `Mois impossible : ${m}. Le mois va de 01 à 12.`
+  if (!RE_DATE.test(v)) return fin ? 'Date incomplète : écrivez jour, mois et année (ex. 01/07/24).' : ''
+  const annee = a.length === 2 ? 2000 + +a : +a
+  const d = new Date(annee, +m - 1, +j)
+  if (d.getMonth() !== +m - 1) return `Le ${j.padStart(2, '0')}/${m.padStart(2, '0')}/${annee} n’existe pas.`
+  if (annee < 2000) return `Année ${annee} trop ancienne : vérifiez.`
+  if (d > new Date()) return 'Cette date est dans le futur : vérifiez.'
+  return ''
+}
+const dateValide = (v) => !erreurDate(v, true)
+
+/** Place les « / » au fil de la frappe : 010724 → 01/07/24, 1/7/24 → 01/07/24. */
+function masquerDate(el, e) {
+  if (e.inputType?.startsWith('delete') || /[?=]/.test(el.value) || el.selectionStart !== el.value.length) return
+  const parts = el.value.replace(/[.\-\s]/g, '/').replace(/[^\d/]/g, '').replace(/\/{2,}/g, '/').split('/')
+  const out = []
+  parts.forEach((seg, i) => {
+    if (i < parts.length - 1) { out.push(seg.length === 1 && out.length < 2 ? '0' + seg : seg); return }
+    while (out.length < 2 && seg.length > 2) { out.push(seg.slice(0, 2)); seg = seg.slice(2) }
+    out.push(seg.slice(0, out.length < 2 ? 2 : 4))
+  })
+  let r = out.slice(0, 3).join('/')
+  if (out.length < 3 && out.at(-1).length === 2) r += '/'
+  el.value = r
+}
+const CLE_STOCKAGE = 'saisie-registre-v1'
+const REGISTRES = window.REGISTRES ?? {}
+
+// ── État, mémorisé dans ce navigateur ────────────────────────
+// lignes : toutes les lignes, chacune porte son service ; epingles et controles : par service.
+let etat = { lignes: [], rotations: {}, epingles: {}, controles: {}, service: null }
+try { etat = { ...etat, ...JSON.parse(localStorage.getItem(CLE_STOCKAGE)) } } catch { /* stockage indisponible */ }
+if (Array.isArray(etat.epingles)) etat.epingles = { PED: etat.epingles }       // ancienne version
+for (const l of etat.lignes) l.service ??= 'PED'                                // ancienne version : tout était en pédiatrie
+if (!REGISTRES[etat.service]) etat.service = Object.keys(REGISTRES)[0]
+
+let photos = []           // { nom, url } — photos ouvertes pendant cette séance
+let photoCourante = null
+let edition = null        // index (dans etat.lignes) de la ligne modifiée, sinon null
+
+const registre = () => REGISTRES[etat.service]
+const colonnes = () => registre().colonnes
+const lignesService = () => etat.lignes.filter((l) => l.service === etat.service)
+const epingles = () => (etat.epingles[etat.service] ??= [registre().dateReference].filter(Boolean))
+
+function sauver() {
+  try { localStorage.setItem(CLE_STOCKAGE, JSON.stringify(etat)) }
+  catch { message('Sauvegarde automatique impossible dans ce navigateur : exportez le CSV régulièrement.', 'alerte') }
+  if (typeof majPastille === 'function') majPastille()
+  $('#compteur').textContent = `${lignesService().length} ligne(s)`; $('#navLignes').textContent = lignesService().length; $('#compteur').title = `${lignesService().length} ligne(s) saisie(s) en ${registre().nom}`
+}
+function message(t, type = 'ok') {
+  $('#msg').innerHTML = t ? `<div class="alert ${type === 'ok' ? 'ok' : 'crit'}" style="margin-bottom:var(--space-3)">${t}</div>` : ''
+  if (t && type === 'ok') setTimeout(() => { if ($('#msg').textContent === t) $('#msg').innerHTML = '' }, 2500)
+}
+
+// ── Visionneuse de photo (zoom, déplacement, rotation) ───────
+function creerVisionneuse(boite, { suivante } = {}) {
+  const img = boite.querySelector('img'), vide = boite.querySelector('.empty')
+  const numero = boite.appendChild(Object.assign(document.createElement('div'), { className: 'numeroPhoto' }))
+  // Calque des masques : mêmes dimensions et même transformation que l'image ; coordonnées en fractions de l'image.
+  const calque = boite.insertBefore(Object.assign(document.createElement('div'), { className: 'calqueMasques' }), img.nextSibling)
+  let vue = { e: 1, x: 0, y: 0, contraste: false }, nom = null, glisse = null, modeMasque = false, trace = null
+  const rotation = () => etat.rotations[nom] || 0
+  function appliquer() {
+    const w = img.naturalWidth, h = img.naturalHeight
+    img.style.transform = `translate(${vue.x}px, ${vue.y}px) scale(${vue.e}) translate(${w / 2}px, ${h / 2}px) rotate(${rotation()}deg) translate(${-w / 2}px, ${-h / 2}px)`
+    img.style.filter = vue.contraste ? 'contrast(1.6) grayscale(1)' : 'none'
+    calque.style.transform = img.style.transform; calque.style.setProperty('--inv', 1 / vue.e)
+  }
+  const masquesPhoto = () => ((etat.masques ??= {})[nom] ??= [])
+  function dessinerMasques() {
+    if (!nom || !img.naturalWidth) { calque.innerHTML = ''; return }
+    const w = img.naturalWidth, h = img.naturalHeight, boiteM = (m, cls = '', i = null) => `<div class="masque ${cls}" style="left:${m.x * w}px;top:${m.y * h}px;width:${m.w * w}px;height:${m.h * h}px">${modeMasque && i !== null ? `<button type="button" data-suppr-masque="${i}" title="Retirer ce masque">×</button>` : ''}</div>`
+    calque.style.width = `${w}px`; calque.style.height = `${h}px`
+    calque.innerHTML = (etat.masques?.[nom] ?? []).map((m, i) => boiteM(m, '', i)).join('') + (trace ? boiteM(rectTrace(), 'trace') : '')
+  }
+  // Point de l'écran → position dans l'image (fractions 0–1), en inversant zoom, déplacement et rotation.
+  function versImage(ev) {
+    const b = boite.getBoundingClientRect(), p = new DOMMatrix(getComputedStyle(img).transform).inverse().transformPoint(new DOMPoint(ev.clientX - b.left, ev.clientY - b.top))
+    return { x: Math.min(1, Math.max(0, p.x / img.naturalWidth)), y: Math.min(1, Math.max(0, p.y / img.naturalHeight)) }
+  }
+  const rectTrace = () => ({ x: Math.min(trace.a.x, trace.b.x), y: Math.min(trace.a.y, trace.b.y), w: Math.abs(trace.a.x - trace.b.x), h: Math.abs(trace.a.y - trace.b.y) })
+  function basculerMasque(actif) {
+    modeMasque = actif; boite.classList.toggle('mode-masque', actif)
+    boite.querySelector('[data-action="masquer"]')?.classList.toggle('actif', actif)
+    const barre = boite.querySelector('.barreMasque'); if (barre) barre.hidden = !actif
+    dessinerMasques()
+  }
+  function ajuster() {
+    if (!nom) return
+    const r = rotation() % 180 !== 0
+    const w = r ? img.naturalHeight : img.naturalWidth, h = r ? img.naturalWidth : img.naturalHeight
+    vue.e = Math.min(boite.clientWidth / w, boite.clientHeight / h)
+    vue.x = (boite.clientWidth - img.naturalWidth * vue.e) / 2
+    vue.y = (boite.clientHeight - img.naturalHeight * vue.e) / 2
+    appliquer()
+  }
+  function zoomer(f, cx = boite.clientWidth / 2, cy = boite.clientHeight / 2) {
+    const e = Math.min(8, Math.max(0.05, vue.e * f))
+    vue.x = cx - (cx - vue.x) * (e / vue.e); vue.y = cy - (cy - vue.y) * (e / vue.e); vue.e = e; appliquer()
+  }
+  boite.addEventListener('wheel', (ev) => {
+    ev.preventDefault(); const b = boite.getBoundingClientRect()
+    zoomer(ev.deltaY < 0 ? 1.15 : 1 / 1.15, ev.clientX - b.left, ev.clientY - b.top)
+  }, { passive: false })
+  boite.addEventListener('mousedown', (ev) => {
+    if (ev.target.closest('button') || ev.target.closest('.barreMasque') || !nom) return
+    if (modeMasque) { const p = versImage(ev); trace = { a: p, b: p }; ev.preventDefault(); return }
+    glisse = { x: ev.clientX - vue.x, y: ev.clientY - vue.y }; boite.classList.add('glisse')
+  })
+  window.addEventListener('mousemove', (ev) => {
+    if (trace) { trace.b = versImage(ev); dessinerMasques(); return }
+    if (glisse) { vue.x = ev.clientX - glisse.x; vue.y = ev.clientY - glisse.y; appliquer() }
+  })
+  window.addEventListener('mouseup', () => {
+    if (trace) { const r = rectTrace(); trace = null; if (r.w * img.naturalWidth > 4 && r.h * img.naturalHeight > 4) { masquesPhoto().push(r); sauver(); majListePhotos() } dessinerMasques() }
+    glisse = null; boite.classList.remove('glisse')
+  })
+  boite.addEventListener('click', (ev) => {
+    const x = ev.target.closest('[data-suppr-masque]')
+    if (x) { masquesPhoto().splice(+x.dataset.supprMasque, 1); sauver(); dessinerMasques(); majListePhotos(); return }
+    const a = ev.target.closest('[data-masque]')?.dataset.masque; if (!a || !nom) return
+    if (a === 'precedente') {
+      const i = photos.findIndex((p) => p.nom === nom), prec = photos.slice(0, Math.max(0, i)).reverse().find((p) => etat.masques?.[p.nom]?.length)
+      if (!prec) { message('Aucune photo précédente n’a de masques.', 'alerte'); return }
+      etat.masques[nom] = etat.masques[prec.nom].map((m) => ({ ...m })); sauver(); dessinerMasques(); majListePhotos()
+      message(`Masques recopiés depuis ${prec.nom} : vérifiez qu’ils couvrent bien les noms et les téléphones, ajustez si besoin.`)
+    }
+    if (a === 'effacer' && confirm('Effacer tous les masques de cette photo ?')) { delete etat.masques[nom]; sauver(); dessinerMasques(); majListePhotos() }
+    if (a === 'enregistrer') enregistrerMasquees(photos.filter((p) => p.nom === nom))
+    if (a === 'toutes') enregistrerMasquees(photos)
+  })
+  window.addEventListener('resize', ajuster)
+  boite.querySelector('.outilsPhoto').addEventListener('click', (ev) => {
+    const a = ev.target.dataset.action; if (!a || !nom) return
+    if (a === 'tournerG' || a === 'tournerD') { etat.rotations[nom] = (rotation() + (a === 'tournerD' ? 90 : 270)) % 360; sauver(); ajuster() }
+    if (a === 'plus') zoomer(1.3)
+    if (a === 'moins') zoomer(1 / 1.3)
+    if (a === 'ajuster') ajuster()
+    if (a === 'contraste') { vue.contraste = !vue.contraste; appliquer() }
+    if (a === 'masquer') basculerMasque(!modeMasque)
+    if (a === 'suivante') suivante?.()
+  })
+  return {
+    afficher(nomPhoto) {
+      const p = photos.find((x) => x.nom === nomPhoto)
+      nom = p ? nomPhoto : null
+      vide.style.display = p ? 'none' : 'grid'
+      img.style.display = p ? 'block' : 'none'
+      if (p) { img.onload = () => { ajuster(); dessinerMasques() }; img.src = p.url } else dessinerMasques()
+      // Numéro de la photo dans l'ordre des fichiers ouverts (tri par nom), et son nom.
+      const i = photos.indexOf(p)
+      numero.style.display = p ? 'block' : 'none'
+      numero.textContent = p ? `Photo ${i + 1} / ${photos.length} · ${p.nom.replace(/\.[^.]+$/, '')}` : ''
+    },
+    ajuster
+  }
+}
+
+// ── Photos masquées : les rectangles sont peints en noir sur une copie (l'original n'est jamais modifié) ──
+async function photoMasquee(p) {
+  const im = await new Promise((ok, ko) => { const i = new Image(); i.onload = () => ok(i); i.onerror = ko; i.src = p.url })
+  const r = ((etat.rotations[p.nom] || 0) % 360 + 360) % 360, w = im.naturalWidth, h = im.naturalHeight, cv = document.createElement('canvas')
+  cv.width = r % 180 ? h : w; cv.height = r % 180 ? w : h
+  const ctx = cv.getContext('2d')
+  ctx.translate(cv.width / 2, cv.height / 2); ctx.rotate(r * Math.PI / 180); ctx.translate(-w / 2, -h / 2)
+  ctx.drawImage(im, 0, 0); ctx.fillStyle = '#000'
+  for (const m of etat.masques?.[p.nom] ?? []) ctx.fillRect(m.x * w - 2, m.y * h - 2, m.w * w + 4, m.h * h + 4)
+  return new Promise((ok) => cv.toBlob(ok, 'image/jpeg', 0.92))       // le canvas ne garde aucune métadonnée
+}
+async function enregistrerMasquees(liste) {
+  const avec = liste.filter((p) => etat.masques?.[p.nom]?.length), sans = liste.length - avec.length
+  if (!avec.length) { message('Aucune photo n’a de masque : tracez d’abord les rectangles sur les noms et les téléphones.', 'alerte'); return }
+  if (sans && !confirm(`${sans} photo(s) n’ont aucun masque et ne seront pas enregistrées. Continuer avec les ${avec.length} photo(s) masquée(s) ?`)) return
+  const nomFichier = (p) => `${p.nom.replace(/\.[^.]+$/, '')}-masquee.jpg`
+  if (window.showDirectoryPicker) {
+    let dossier; try { dossier = await window.showDirectoryPicker({ mode: 'readwrite' }) } catch { return }
+    for (const p of avec) { const f = await dossier.getFileHandle(nomFichier(p), { create: true }), w = await f.createWritable(); await w.write(await photoMasquee(p)); await w.close() }
+  } else {
+    for (const p of avec) { const a = document.createElement('a'); a.href = URL.createObjectURL(await photoMasquee(p)); a.download = nomFichier(p); a.click(); await new Promise((r) => setTimeout(r, 350)) }
+  }
+  message(`${avec.length} photo(s) masquée(s) enregistrée(s) (« …-masquee.jpg »). Les originaux ne sont pas modifiés.`)
+}
+
+// ── 1 · Saisie ───────────────────────────────────────────────
+const formulaire = $('#formulaire')
+function photoSuivante() {
+  const i = photos.findIndex((p) => p.nom === photoCourante)
+  if (i >= 0 && i < photos.length - 1) afficherPhoto(photos[i + 1].nom)
+  else message('C’était la dernière photo ouverte.')
+}
+const visionSaisie = creerVisionneuse($('#visionneuseSaisie'), { suivante: photoSuivante })
+const lignesPhoto = () => lignesService().filter((l) => l.photo === photoCourante).length
+
+function construireFormulaire() {
+  let html = '', paire = []
+  const vider = () => { if (paire.length) { html += `<div class="grille2">${paire.join('')}</div>`; paire = [] } }
+  for (const c of colonnes()) {
+    const pin = c.k === registre().ordre || c.k === 'remarque' ? ''
+      : `<button type="button" class="garder" data-epingle="${c.k}" tabindex="-1"
+           title="Garder cette valeur pour toutes les lignes suivantes (utile quand elle est la même sur toute la page)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg><span>Garder</span></button>`
+    const champ = `<label class="field" for="f_${c.k}"><span><span>${echapper(c.l)}</span>${pin}</span>
+      <input class="input" id="f_${c.k}" name="${c.k}" list="dl_${c.k}" ${c.date ? 'placeholder="jj/mm/aa" inputmode="numeric"' : ''}>
+      <datalist id="dl_${c.k}"></datalist>${c.date ? `<span class="err" id="err_${c.k}"></span>` : ''}${c.raccourcis ? `<span class="raccourcis">${c.raccourcis.map((a, i) => `<button type="button" tabindex="-1" data-raccourci="${echapper(a)}" data-champ="${c.k}" title="${echapper(((window.ABREVIATIONS ?? {})[a] ?? a) + (i < 9 ? ` — raccourci clavier : Alt + ${i + 1}` : ''))}">${i < 9 ? `<small>${i + 1}</small>` : ''}${echapper(a)}</button>`).join('')}</span>` : ''}<span class="hint calcul" id="info_${c.k}"></span>${c.aide ? `<span class="hint">${echapper(c.aide)}</span>` : ''}</label>`
+    if (c.court) paire.push(champ); else { vider(); html += champ }
+  }
+  vider()
+  formulaire.innerHTML = html
+  const cols = colonnes().filter((c) => c.tableau)
+  $('#enteteTableau').innerHTML = `<tr>${cols.map((c) => `<th>${echapper(c.l)}</th>`).join('')}<th></th></tr>`
+  $('#kickerLigne').textContent = `Ligne du registre · ${registre().nom}`
+}
+
+function majSuggestions() {
+  for (const c of colonnes()) {
+    if (c.date || c.k === registre().ordre || c.k === 'remarque') continue
+    const freq = {}
+    for (const l of lignesService()) if (l[c.k] && !l[c.k].includes('?')) freq[l[c.k]] = (freq[l[c.k]] || 0) + 1
+    $(`#dl_${c.k}`).innerHTML = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 60)
+      .map(([v]) => `<option value="${echapper(v)}">`).join('')
+  }
+}
+function majEpingles() {
+  for (const b of document.querySelectorAll('[data-epingle]')) {
+    const actif = epingles().includes(b.dataset.epingle)
+    b.classList.toggle('active', actif)
+    b.querySelector('span').textContent = actif ? 'Gardé' : 'Garder'
+    b.title = actif ? 'Valeur gardée pour les lignes suivantes — cliquer pour ne plus la garder'
+                    : 'Garder cette valeur pour toutes les lignes suivantes (utile quand elle est la même sur toute la page)'
+    $(`#f_${b.dataset.epingle}`).classList.toggle('epinglee', actif)
+  }
+  majBandeau()
+}
+// Bandeau : quelles valeurs seront reprises sur la ligne suivante.
+function majBandeau() {
+  const gardes = epingles().map((k) => colonnes().find((c) => c.k === k)).filter(Boolean)
+  const b = $('#bandeauGardes')
+  b.classList.toggle('visible', gardes.length > 0)
+  if (!gardes.length) { b.innerHTML = ''; return }
+  b.innerHTML = `<strong>Gardées pour les lignes suivantes</strong> — elles se remplissent toutes seules et la touche Entrée les saute :
+    <div class="valeurs">${gardes.map((c) => `<span>${echapper(c.l)} : ${echapper($(`#f_${c.k}`).value) || '<em>vide</em>'}</span>`).join('')}</div>
+    <button type="button" class="btn btn-ghost btn-sm" id="liberer" style="padding:2px 6px">Ne plus rien garder</button>`
+  $('#liberer').onclick = () => { etat.epingles[etat.service] = []; sauver(); majEpingles() }
+}
+function controler(fin = true) {
+  let ok = true
+  for (const c of colonnes()) {
+    const el = $(`#f_${c.k}`), v = el.value.trim()
+    el.classList.toggle('douteux', v.includes('?'))
+    if (!c.date) continue
+    const erreur = erreurDate(v, fin)
+    el.classList.toggle('invalid', !!erreur)
+    $(`#err_${c.k}`).textContent = erreur
+    if (erreurDate(v, true)) ok = false
+  }
+  return ok
+}
+// ── Recopie automatique (ex. date d'entrée = date d'enregistrement) ──
+// Le champ cible reçoit la valeur de sa source tant que vous ne l'avez pas modifié vous-même.
+function appliquerRecopies() {
+  for (const [cible, source] of Object.entries(registre().recopier ?? {})) {
+    const c = $(`#f_${cible}`), s = $(`#f_${source}`)
+    if (!c || !s || (c.value.trim() && c.dataset.auto !== '1')) continue
+    c.value = s.value
+    c.dataset.auto = s.value ? '1' : ''
+    c.classList.toggle('auto', !!s.value)
+    $(`#info_${cible}`).textContent = s.value ? 'Recopiée de la date d’enregistrement — modifiez-la si elle est différente.' : ''
+  }
+}
+function oublierRecopie(el) {
+  if (el.dataset.auto !== '1') return
+  el.dataset.auto = ''; el.classList.remove('auto')
+  $(`#info_${el.name}`).textContent = ''
+}
+
+// ── Sortie calculée : affichée pour information, jamais écrite dans la case ──
+// Elle est calculée à l'import par l'application (date d'entrée + nombre de jours) et marquée
+// « sortie calculée » : on doit pouvoir distinguer une sortie écrite d'une sortie déduite.
+function lireDate(v) {
+  const m = RE_DATE.exec(v || ''); if (!m || !dateValide(v)) return null
+  return { d: new Date(m[3].length === 2 ? 2000 + +m[3] : +m[3], +m[2] - 1, +m[1]), court: m[3].length === 2 }
+}
+const ecrireDate = (d, court) => `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${court ? String(d.getFullYear()).slice(2) : d.getFullYear()}`
+function majSortieCalculee() {
+  const r = registre().sortieCalculee; if (!r) return
+  const info = $(`#info_${r.sortie}`), sortie = $(`#f_${r.sortie}`).value.trim()
+  const entree = lireDate($(`#f_${r.entree}`).value.trim())
+  const jours = parseInt(($(`#f_${r.jours}`).value.match(/\d+/) ?? [])[0], 10)
+  if (!entree || Number.isNaN(jours)) { info.textContent = ''; return }
+  const nuits = new Date(entree.d); nuits.setDate(nuits.getDate() + jours)
+  const incl = new Date(entree.d); incl.setDate(incl.getDate() + Math.max(0, jours - 1))
+  if (!sortie) {
+    info.textContent = jours > 0
+      ? `Sortie non écrite : le ${ecrireDate(incl, entree.court)} si le jour d’entrée et de sortie sont comptés, le ${ecrireDate(nuits, entree.court)} si ce sont des nuits. Les deux sont pris en compte : rien à taper.`
+      : `Sortie le jour même (${ecrireDate(nuits, entree.court)}). Rien à taper.`
+    return
+  }
+  const ecrite = lireDate(sortie)
+  const ecart = ecrite ? Math.round((ecrite.d - entree.d) / 86400000) : null
+  // Deux façons de compter : les nuits (sortie − entrée) ou les jours de calendrier, entrée et sortie comprises (+1).
+  info.textContent = ecart === null ? ''
+    : ecart === jours - 1 ? `${ecart} nuit(s) entre entrée et sortie, ${jours} j écrits : le registre compte le jour d’entrée et le jour de sortie. C’est normal, recopiez tel quel.`
+    : Math.abs(ecart - jours) > 1 ? `Attention : ${ecart} j entre entrée et sortie, mais ${jours} j écrits.` : ''
+}
+
+const lireFormulaire = () => Object.fromEntries(colonnes().map((c) => [c.k, $(`#f_${c.k}`).value.trim()]))
+function remplirFormulaire(l) {
+  for (const c of colonnes()) {
+    const el = $(`#f_${c.k}`)
+    el.value = l?.[c.k] ?? ''; el.dataset.auto = ''; el.classList.remove('auto')
+    $(`#info_${c.k}`).textContent = ''
+  }
+  controler(); majSortieCalculee()
+}
+
+function lignePrecedente() {
+  if (edition !== null) {
+    const avant = etat.lignes.slice(0, edition).filter((l) => l.service === etat.service)
+    return avant.at(-1) ?? null
+  }
+  const svc = lignesService()
+  return svc.filter((l) => l.photo === photoCourante).at(-1) ?? svc.at(-1) ?? null
+}
+
+// « = » → date de référence ; jour seul (« 5 ») → complété avec le mois et l'année de la date de référence.
+function completerDate(el) {
+  const ref = $(`#f_${registre().dateReference}`)?.value.trim() ?? ''
+  const v = el.value.trim().replace(/\/$/, ''), m = RE_DATE.exec(ref)
+  if (v === '=' && el.id !== `f_${registre().dateReference}`) el.value = ref
+  else if (/^\d{1,2}$/.test(v) && m) el.value = `${v.padStart(2, '0')}/${m[2].padStart(2, '0')}/${m[3]}`
+}
+// « 7500 Sortie » ou « SCAM 15.000 » : le montant part dans la colonne prévue par le registre.
+function separerMontant() {
+  const regle = registre().montant; if (!regle) return
+  const source = $(`#f_${regle.depuis}`), cible = $(`#f_${regle.vers}`)
+  const v = source.value.trim()
+  const m = /^(\d[\d\s.]*\d|\d)\s*(?:f(?:cfa)?\b)?\s*(.*)$/i.exec(v) || /^(.*?)\s+(\d[\d\s.]*\d|\d)\s*(?:f(?:cfa)?)?$/i.exec(v)
+  if (!m || cible.value.trim()) return
+  const montantDabord = /^\d/.test(v)
+  const montant = (montantDabord ? m[1] : m[2]).replace(/[\s.]/g, '')
+  if (montant.length < 3) return
+  cible.value = montant; source.value = (montantDabord ? m[2] : m[1]).trim()
+  message(`Montant ${montant} placé dans « ${colonnes().find((c) => c.k === regle.vers).l} ».`)
+}
+
+function nouvelleLigne() {
+  edition = null
+  const prec = lignePrecedente(), base = {}
+  if (prec) {
+    for (const k of epingles()) base[k] = prec[k]
+    const ko = registre().ordre, n = parseInt(prec[ko], 10)
+    if (ko && !Number.isNaN(n)) base[ko] = String(n + 1).padStart(prec[ko].length, '0')
+  }
+  remplirFormulaire(base); majEpingles(); appliquerRecopies(); majSortieCalculee()
+  $('#titreLigne').textContent = 'Nouvelle ligne'
+  $('#supprimer').disabled = true
+  majNavigationEdition()
+  majTableau()
+  const premier = $(`#f_${colonnes()[0].k}`); premier.focus(); premier.select()
+}
+
+// Identifiant d'une ligne : service + date d'enregistrement COMPLÈTE (jour compris) + N° d'ordre.
+// Le jour est indispensable : la numérotation du registre peut repartir en cours de mois
+// (n° 62 à 81 au début et à la fin de septembre 2024), ce sont alors des enfants différents.
+function identifiant(l) {
+  const reg = REGISTRES[l.service] ?? registre()
+  const m = RE_DATE.exec(String(l[reg.dateReference] || '').trim()), n = String(l[reg.ordre] ?? '').trim()
+  if (!m || !n || n.includes('?')) return ''
+  const annee = m[3].length === 2 ? '20' + m[3] : m[3]
+  return `${l.service}-${annee}${m[2].padStart(2, '0')}${m[1].padStart(2, '0')}-${n.padStart(3, '0')}`
+}
+
+// Parcours des lignes en correction : la liste dans laquelle « Précédente / Suivante » avancent
+// (les lignes affichées dans l'Aperçu, mois et recherche compris, sinon toutes les lignes du service).
+let parcours = null
+const listeParcours = () => (parcours ?? lignesService().map((l) => etat.lignes.indexOf(l))).filter((i) => etat.lignes[i]?.service === etat.service)
+function majNavigationEdition() {
+  const enEdition = edition !== null, liste = listeParcours(), pos = liste.indexOf(edition)
+  $('#lignePrecedenteEd').hidden = $('#ligneSuivanteEd').hidden = !enEdition
+  $('#lignePrecedenteEd').disabled = pos <= 0
+  $('#ligneSuivanteEd').disabled = pos < 0 || pos >= liste.length - 1
+  $('#positionEd').textContent = enEdition && pos >= 0 ? `ligne ${pos + 1} / ${liste.length}${parcours?.libelle ? ` · ${parcours.libelle}` : ''}` : ''
+}
+function allerLigne(sens) {
+  if (edition === null) return
+  const liste = listeParcours(), cible = liste[liste.indexOf(edition) + sens]
+  if (cible === undefined) return
+  if (enregistrer({ ensuite: false })) editerLigne(cible)
+}
+
+// Renvoie true si la ligne a été enregistrée. ensuite = false : reste sur la ligne (pour passer à une autre).
+function enregistrer({ ensuite = true } = {}) {
+  // Une photo n'est exigée que pour une NOUVELLE ligne : une ligne importée ou transcrite sans photo se corrige quand même.
+  if (edition === null && !photoCourante) { message('Ouvrez d’abord les photos du service.', 'alerte'); return false }
+  for (const c of colonnes()) if (c.date) completerDate($(`#f_${c.k}`))
+  separerMontant()
+  if (!controler()) { message('Une date est incorrecte : lisez le message en rouge sous le champ (ou tapez « ? » si elle est illisible).', 'alerte'); return false }
+  // Une ligne corrigée garde sa photo d'origine, même si une autre photo est affichée.
+  const l = { ...lireFormulaire(), photo: edition !== null ? etat.lignes[edition].photo : photoCourante, service: etat.service }
+  if (!colonnes().some((c) => l[c.k])) { message('Ligne vide.', 'alerte'); return false }
+  const id = identifiant(l)
+  const doublon = id && etat.lignes.some((x, i) => i !== edition && identifiant(x) === id)
+  const max = registre().maxLignesParPhoto
+  if (edition === null && max && lignesPhoto() >= max &&
+      !confirm(`Cette photo a déjà ${lignesPhoto()} lignes, alors qu’une page en contient au plus ${max}.\n` +
+               'Vérifiez qu’il ne s’agit pas d’un doublon ou d’une ligne d’une autre photo.\n\nEnregistrer quand même ?')) return false
+  const nouvelle = edition === null
+  if (nouvelle) etat.lignes.push(l); else etat.lignes[edition] = l
+  sauver(); majSuggestions(); majListePhotos()
+  message(doublon ? `Attention : la ligne ${id} existe déjà (même date et même N° d’ordre).` : 'Ligne enregistrée.', doublon ? 'alerte' : 'ok')
+  if (!ensuite) return true
+  nouvelleLigne()
+  if (nouvelle && !doublon && max && lignesPhoto() === max) {
+    $('#msg').innerHTML = `<div class="alert ok" style="margin-bottom:var(--space-3);display:block">
+      <strong>${max} lignes saisies : la page est complète.</strong>
+      <div style="margin-top:6px"><button type="button" class="btn btn-primary btn-sm" id="allerSuivante">Photo suivante ›</button></div></div>`
+    $('#allerSuivante').onclick = () => { message(''); photoSuivante() }
+  }
+  return true
+}
+
+function majTableau() {
+  const max = registre().maxLignesParPhoto, n = photoCourante ? lignesPhoto() : 0
+  $('#compteurPhoto').innerHTML = !photoCourante ? '' : max
+    ? `<span class="tag ${n > max ? 'tag-sev-1' : n === max ? 'tag-sev-4' : 'tag-neutral'}">${n} / ${max} lignes</span>`
+    : `<span class="tag tag-neutral">${n} ligne(s)</span>`
+  const cols = colonnes().filter((c) => c.tableau)
+  $('#lignesPhoto').innerHTML = etat.lignes.map((l, i) => ({ l, i }))
+    .filter((x) => x.l.service === etat.service && x.l.photo === photoCourante)
+    .map(({ l, i }) => `<tr data-i="${i}" class="${i === edition ? 'selection' : ''}" title="Cliquer pour modifier cette ligne">
+      ${cols.map((c) => `<td>${echapper(l[c.k])}</td>`).join('')}
+      <td class="actions"><button type="button" class="corbeille" data-supprimer="${i}" title="Supprimer cette ligne"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button></td></tr>`).join('')
+}
+
+/**
+ * Supprime la ligne d'indice i, après confirmation.
+ * Le contrôle qualité désigne les lignes par leur position : on retire la ligne de l'échantillon
+ * et on décale les positions suivantes, sinon il pointerait vers de mauvaises lignes.
+ */
+function supprimerLigne(i) {
+  const l = etat.lignes[i]
+  if (!l || !confirm(`Supprimer la ligne n° ${l[registre().ordre] || '?'} (${l.photo}) ?\nElle sera retirée de la saisie et du fichier exporté.`)) return
+  etat.lignes.splice(i, 1)
+  const decaler = (j) => (j > i ? j - 1 : j)
+  for (const c of Object.values(etat.controles)) {
+    const position = c.ids[c.position]
+    c.ids = c.ids.filter((j) => j !== i).map(decaler)
+    c.faites = c.faites.filter((j) => j !== i).map(decaler)
+    c.faux = Object.fromEntries(Object.entries(c.faux).filter(([j]) => +j !== i).map(([j, v]) => [decaler(+j), v]))
+    c.position = Math.max(0, Math.min(c.ids.indexOf(decaler(position)) >= 0 ? c.ids.indexOf(decaler(position)) : c.position, c.ids.length - 1))
+  }
+  const enEdition = edition === i
+  if (edition !== null && edition > i) edition--
+  sauver(); majSuggestions(); majListePhotos()
+  message('Ligne supprimée.')
+  if (enEdition || edition === null) nouvelleLigne(); else majTableau()
+}
+$('#lignesPhoto').addEventListener('click', (e) => {
+  const corbeille = e.target.closest('[data-supprimer]')
+  if (corbeille) { e.stopPropagation(); supprimerLigne(+corbeille.dataset.supprimer); return }
+  const tr = e.target.closest('tr'); if (tr) { parcours = null; editerLigne(+tr.dataset.i) }
+})
+
+/** Ouvre une ligne dans le formulaire ; affiche d'abord sa photo si elle n'est pas à l'écran. */
+function editerLigne(i) {
+  const l = etat.lignes[i]; if (!l) return
+  if (l.photo !== photoCourante) {
+    if (photos.some((p) => p.nom === l.photo)) afficherPhoto(l.photo)
+    else { photoCourante = l.photo; visionSaisie.afficher(null); majListePhotos() }
+  }
+  edition = i
+  remplirFormulaire(l)
+  $('#titreLigne').textContent = `Modifier la ligne n° ${l[registre().ordre] || '?'} du ${l[registre().dateReference] || '?'}${l.photo ? ` · ${l.photo}` : ' · sans photo'}`
+  $('#supprimer').disabled = false
+  majNavigationEdition()
+  majTableau()
+}
+
+// ── Aperçu de toutes les lignes du service ──
+// Mois d'une ligne (aaaa-mm) : date d'enregistrement, sinon date d'entrée ; un jour illisible (« 0?/02/25 ») suffit.
+const MOIS_LONGS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre']
+function moisLigne(l) {
+  const r = registre()
+  for (const v of [l[r.dateReference], l[r.sortieCalculee?.entree ?? 'date_entree']]) {
+    const m = String(v ?? '').trim().match(/^[\d?]{1,2}[\/.\-](\d{1,2})[\/.\-](\d{2}|\d{4})/)
+    if (m && +m[1] >= 1 && +m[1] <= 12) return `${m[2].length === 2 ? '20' + m[2] : m[2]}-${m[1].padStart(2, '0')}`
+  }
+  return ''
+}
+const nomMois = (k) => (k ? `${MOIS_LONGS[+k.slice(5) - 1]} ${k.slice(0, 4)}` : 'mois inconnu')
+function lignesApercu() {
+  const cols = colonnes(), q = $('#apercuRecherche').value.trim().toLowerCase(), mo = $('#apercuMois').value
+  const lignes = etat.lignes.map((l, i) => ({ l, i })).filter((x) => x.l.service === etat.service)
+  const duMois = mo === '*' ? lignes : lignes.filter(({ l }) => moisLigne(l) === mo)
+  return { cols, q, mo, lignes, duMois, visibles: q ? duMois.filter(({ l }) => cols.map((c) => l[c.k]).join(' ').toLowerCase().includes(q)) : duMois }
+}
+function remplirMoisApercu() {
+  const sel = $('#apercuMois'), avant = sel.value || '*', n = {}
+  for (const l of lignesService()) { const k = moisLigne(l); n[k] = (n[k] ?? 0) + 1 }
+  const cles = Object.keys(n).sort((a, b) => (a || '9999').localeCompare(b || '9999'))
+  sel.innerHTML = `<option value="*">Tous les mois (${lignesService().length})</option>` + cles.map((k) => `<option value="${k}">${nomMois(k)} (${n[k]})</option>`).join('')
+  sel.value = cles.includes(avant) ? avant : '*'
+}
+function afficherApercu() {
+  const { cols, q, mo, lignes, duMois, visibles } = lignesApercu()
+  const douteuses = duMois.filter(({ l }) => cols.some((c) => (l[c.k] || '').includes('?'))).length
+  const r = registre().sortieCalculee
+  const aCalculer = r ? duMois.filter(({ l }) => !l[r.sortie] && l[r.jours]).length : 0
+  const sansDuree = r ? duMois.filter(({ l }) => !String(l[r.sortie] ?? '').trim() && !/\d/.test(String(l[r.jours] ?? ''))).length : 0
+  $('#apercuKicker').textContent = registre().nom + (mo !== '*' ? ` · ${nomMois(mo)}` : '')
+  $('#apercuStats').innerHTML = [
+    `<span class="tag tag-brand">${duMois.length} ligne(s)${mo !== '*' ? ` en ${nomMois(mo)} (sur ${lignes.length})` : ''}</span>`,
+    `<span class="tag ${douteuses ? 'tag-sev-3' : 'tag-neutral'}">${douteuses} ligne(s) avec « ? »</span>`,
+    r ? `<span class="tag tag-neutral">${aCalculer} sortie(s) à calculer avec le nombre de jours</span>` : '',
+    r ? `<span class="tag ${sansDuree ? 'tag-sev-3' : 'tag-neutral'}">${sansDuree} sans sortie ni nombre de jours</span>` : '',
+    q ? `<span class="tag tag-neutral">${visibles.length} affichée(s) pour « ${echapper(q)} »</span>` : ''
+  ].join('')
+  $('#apercuEntete').innerHTML = `<tr><th>Identifiant</th>${cols.map((c) => `<th>${echapper(c.l)}</th>`).join('')}<th></th></tr>`
+  $('#apercuCorps').innerHTML = visibles.length
+    ? visibles.map(({ l, i }) => `<tr data-i="${i}">
+        <td class="ident"><button type="button" class="ouvrir-ligne" data-ouvrir="${i}" title="Ouvrir toute la ligne dans le formulaire">✎</button>${echapper(identifiant(l)) || '<span class="text-muted">—</span>'}</td>
+        ${cols.map((c) => `<td data-k="${c.k}" class="${(l[c.k] || '').includes('?') ? 'douteux' : ''}" title="${echapper(l[c.k])}">${echapper(l[c.k])}</td>`).join('')}
+        <td class="actions"><button type="button" class="corbeille" data-supprimer="${i}" title="Supprimer cette ligne"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/></svg></button></td></tr>`).join('')
+    : `<tr><td colspan="${cols.length + 3}" class="text-muted" style="padding:20px;text-align:center">${lignes.length ? 'Aucune ligne ne correspond à la recherche.' : 'Aucune ligne saisie pour ce service.'}</td></tr>`
+}
+$('#ouvrirApercu').onclick = () => { $('#apercuRecherche').value = ''; remplirMoisApercu(); afficherApercu(); $('#apercu').classList.add('visible'); $('#apercuRecherche').focus() }
+$('#apercuMois').addEventListener('change', afficherApercu)
+$('#exporterMois').onclick = () => {
+  const { cols, mo, visibles } = lignesApercu()
+  if (!visibles.length) { alert('Aucune ligne à exporter.'); return }
+  telecharger(`registre-${etat.service.toLowerCase()}-${mo === '*' ? 'tous-les-mois' : mo || 'mois-inconnu'}.csv`, [
+    ['Identifiant ligne', 'Photo', ...cols.map((c) => c.l)].map(csvCellule).join(';'),
+    ...visibles.map(({ l }) => [identifiant(l), l.photo ?? '', ...cols.map((c) => l[c.k])].map(csvCellule).join(';'))
+  ])
+}
+$('#fermerApercu').onclick = () => $('#apercu').classList.remove('visible')
+$('#apercu').addEventListener('click', (e) => { if (e.target.id === 'apercu') $('#apercu').classList.remove('visible') })
+$('#apercuRecherche').addEventListener('input', afficherApercu)
+// ── Modification directe d'une case dans l'Aperçu (comme un tableur) ──
+// La case devient un champ ; Entrée enregistre et descend, Tab / Maj+Tab passent à la case voisine,
+// Échap annule, quitter la case enregistre. Les dates sont contrôlées comme dans le formulaire.
+function editerCase(td) {
+  if (!td || td.classList.contains('en-edition')) return
+  const i = +td.closest('tr').dataset.i, k = td.dataset.k, l = etat.lignes[i], c = colonnes().find((x) => x.k === k)
+  if (!l || !c) return
+  const avant = l[k] ?? ''
+  td.classList.add('en-edition'); td.innerHTML = `<input type="text" autocomplete="off" spellcheck="false">`
+  const input = td.querySelector('input'); input.value = avant; input.focus(); input.select()
+  let fini = false
+  const terminer = (garder, aller, depuisSortie = false) => {
+    if (fini) return
+    let v = input.value.trim()
+    if (garder && c.date) {
+      if (v === '=' && k !== registre().dateReference) v = l[registre().dateReference] ?? ''
+      const m = RE_DATE.exec(String(l[registre().dateReference] ?? '').trim())
+      if (/^\d{1,2}$/.test(v) && m) v = `${v.padStart(2, '0')}/${m[2].padStart(2, '0')}/${m[3]}`
+      const err = erreurDate(v, true)
+      if (err) {
+        $('#apercuEtat').innerHTML = `<span style="color:var(--sev-1-ink)">${echapper(c.l)} : ${echapper(err)}${depuisSortie ? ' Modification annulée.' : ''}</span>`
+        if (depuisSortie) { garder = false } else { input.classList.add('invalid'); input.title = err; input.focus(); return }
+      }
+    }
+    fini = true
+    if (garder && v !== avant) {
+      l[k] = v
+      sauver()
+      const id = identifiant(l), doublon = id && etat.lignes.some((x, j) => j !== i && identifiant(x) === id)
+      $('#apercuEtat').innerHTML = doublon ? `<span style="color:var(--sev-1-ink)">Attention : la ligne ${echapper(id)} existe déjà (même date et même N° d’ordre).</span>`
+        : `Enregistré : ${echapper(c.l)} de la ligne n° ${echapper(l[registre().ordre] || '?')} du ${echapper(l[registre().dateReference] || '?')} : « ${echapper(avant)} » → « ${echapper(v)} ».`
+      td.classList.add('modifiee')
+      td.closest('tr').querySelector('td.ident').innerHTML = `<button type="button" class="ouvrir-ligne" data-ouvrir="${i}" title="Ouvrir toute la ligne dans le formulaire">✎</button>${echapper(id) || '<span class="text-muted">—</span>'}`
+    }
+    const val = l[k] ?? ''
+    td.classList.remove('en-edition'); td.classList.toggle('douteux', val.includes('?')); td.title = val; td.textContent = val
+    if (aller) editerCase(aller(td))
+  }
+  const voisine = (sens) => (t) => { let n = sens > 0 ? t.nextElementSibling : t.previousElementSibling; while (n && !n.dataset.k) n = sens > 0 ? n.nextElementSibling : n.previousElementSibling; return n }
+  const dessous = (sens) => (t) => { let r = sens > 0 ? t.closest('tr').nextElementSibling : t.closest('tr').previousElementSibling; return r?.querySelector(`td[data-k="${k}"]`) }
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation()
+    if (e.key === 'Escape') { e.preventDefault(); input.value = avant; terminer(false) }
+    else if (e.key === 'Enter') { e.preventDefault(); terminer(true, dessous(e.shiftKey ? -1 : 1)) }
+    else if (e.key === 'Tab') { e.preventDefault(); terminer(true, voisine(e.shiftKey ? -1 : 1)) }
+    else if (e.key === 'ArrowDown' && e.altKey) { e.preventDefault(); terminer(true, dessous(1)) }
+    else if (e.key === 'ArrowUp' && e.altKey) { e.preventDefault(); terminer(true, dessous(-1)) }
+  })
+  input.addEventListener('input', () => { input.classList.remove('invalid'); if (c.date) masquerDate(input, { inputType: 'insertText' }) })
+  input.addEventListener('blur', () => terminer(true, null, true))
+}
+$('#apercuCorps').addEventListener('click', (e) => {
+  const corbeille = e.target.closest('[data-supprimer]')
+  if (corbeille) { supprimerLigne(+corbeille.dataset.supprimer); remplirMoisApercu(); afficherApercu(); return }
+  const td = e.target.closest('td[data-k]')
+  if (td) { editerCase(td); return }
+  if (!e.target.closest('[data-ouvrir]')) return
+  const tr = e.target.closest('tr[data-i]'); if (!tr) return
+  const { mo, q, visibles } = lignesApercu()
+  parcours = Object.assign(visibles.map((x) => x.i), { libelle: [mo !== '*' ? nomMois(mo) : '', q ? `« ${q} »` : ''].filter(Boolean).join(' · ') })
+  $('#apercu').classList.remove('visible')
+  document.querySelector('input[name=onglet][value=saisie]').click()
+  editerLigne(+tr.dataset.i)
+})
+
+// Ajoute un terme de saisie rapide à la fin de la case (sans le doubler), curseur à la fin.
+function ajouterTerme(k, terme) {
+  const el = $(`#f_${k}`), sep = colonnes().find((c) => c.k === k)?.separateur ?? ' '
+  const deja = el.value.split(sep.trim() || ' ').map((x) => x.trim()).includes(terme)
+  if (!deja) el.value = el.value.trim() ? el.value.trim() + sep + terme : terme
+  el.dispatchEvent(new InputEvent('input', { bubbles: true }))
+  el.focus(); el.setSelectionRange(el.value.length, el.value.length)
+}
+formulaire.addEventListener('click', (e) => {
+  const r = e.target.closest('[data-raccourci]')
+  if (r) { e.preventDefault(); ajouterTerme(r.dataset.champ, r.dataset.raccourci); return }
+  const b = e.target.closest('[data-epingle]'); if (!b) return
+  e.preventDefault()
+  const k = b.dataset.epingle, liste = epingles()
+  etat.epingles[etat.service] = liste.includes(k) ? liste.filter((x) => x !== k) : [...liste, k]
+  sauver(); majEpingles()
+})
+formulaire.addEventListener('input', (e) => {
+  if (colonnes().find((x) => `f_${x.k}` === e.target.id)?.date) masquerDate(e.target, e)
+  if (Object.keys(registre().recopier ?? {}).includes(e.target.name)) oublierRecopie(e.target)
+  else if (edition === null) appliquerRecopies()
+  controler(false); majSortieCalculee(); majBandeau()
+})
+formulaire.addEventListener('change', (e) => {
+  const c = colonnes().find((x) => `f_${x.k}` === e.target.id)
+  if (c?.date) completerDate(e.target)
+  if (e.target.id === `f_${registre().montant?.depuis}`) separerMontant()
+  if (edition === null) appliquerRecopies()
+  controler(); majSortieCalculee()
+})
+formulaire.addEventListener('keydown', (e) => {
+  // Alt + 1…9 : ajoute le n-ième terme rapide de la case active, sans quitter le clavier.
+  if (e.altKey && !e.ctrlKey && /^Digit[1-9]$/.test(e.code)) {
+    const c = colonnes().find((x) => `f_${x.k}` === e.target.id), terme = c?.raccourcis?.[+e.code.slice(5) - 1]
+    if (terme) { e.preventDefault(); ajouterTerme(c.k, terme) }
+    return
+  }
+  if (e.key.toLowerCase() === 'd' && e.ctrlKey) {
+    e.preventDefault()
+    const prec = lignePrecedente()
+    if (prec && e.target.name) { e.target.value = prec[e.target.name] ?? ''; controler() }
+    return
+  }
+  if (e.key !== 'Enter') return
+  e.preventDefault()
+  if (e.ctrlKey) { enregistrer(); return }
+  const c = colonnes().find((x) => `f_${x.k}` === e.target.id)
+  if (c?.date) completerDate(e.target)
+  if (e.target.id === `f_${registre().montant?.depuis}`) separerMontant()
+  if (edition === null) appliquerRecopies()
+  const champs = colonnes().map((x) => $(`#f_${x.k}`))
+  const rares = new Set(colonnes().filter((c) => c.rare).map((c) => `f_${c.k}`))
+  const sauter = (el) => el.classList.contains('epinglee') || (el.dataset.auto === '1' && el.value) || (rares.has(el.id) && !el.value)
+  let i = champs.indexOf(e.target) + 1
+  while (i < champs.length && sauter(champs[i])) i++
+  if (i < champs.length) { champs[i].focus(); champs[i].select() } else enregistrer()
+})
+document.addEventListener('keydown', (e) => {
+  if ($('#apercu').classList.contains('visible')) { if (e.key === 'Escape') $('#apercu').classList.remove('visible'); return }
+  if (!$('#vueSaisie').classList.contains('visible') || $('#aide').classList.contains('visible')) return
+  if (e.key === 'Escape') nouvelleLigne()
+  if (e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp') && edition !== null) { e.preventDefault(); allerLigne(e.key === 'ArrowDown' ? 1 : -1) }
+  if (e.key === 'Enter' && e.ctrlKey && document.activeElement?.form !== formulaire) enregistrer()
+})
+$('#enregistrer').onclick = () => enregistrer()
+$('#lignePrecedenteEd').onclick = () => allerLigne(-1)
+$('#ligneSuivanteEd').onclick = () => allerLigne(1)
+$('#nouvelle').onclick = nouvelleLigne
+$('#supprimer').onclick = () => { if (edition !== null) supprimerLigne(edition) }
+
+// ── Photos ───────────────────────────────────────────────────
+$('#fichiersPhotos').addEventListener('change', (e) => {
+  photos.forEach((p) => URL.revokeObjectURL(p.url))
+  photos = [...e.target.files].sort((a, b) => a.name.localeCompare(b.name)).map((f) => ({ nom: f.name, url: URL.createObjectURL(f) }))
+  e.target.value = ''
+  majListePhotos()
+  const suivante = photos.find((p) => !lignesService().some((l) => l.photo === p.nom)) ?? photos[0]
+  if (suivante) afficherPhoto(suivante.nom)
+  if ($('#vueControle').classList.contains('visible')) afficherControle()
+})
+function majListePhotos() {
+  $('#listePhotos').innerHTML = photos.length
+    ? photos.map((p, i) => {
+        const n = lignesService().filter((l) => l.photo === p.nom).length, max = registre().maxLignesParPhoto
+        return `<div data-nom="${echapper(p.nom)}" class="photo${p.nom === photoCourante ? ' active' : ''}">
+          <span><span class="num">${i + 1}.</span>${echapper(p.nom.replace(/\.[^.]+$/, ''))}${etat.masques?.[p.nom]?.length ? `<span class="masquee" title="${etat.masques[p.nom].length} masque(s)">■</span>` : ''}</span>${n ? `<span class="tag ${max && n > max ? 'tag-sev-1' : max && n === max ? 'tag-sev-4' : 'tag-brand'}"
+            title="${max ? `${n} ligne(s) sur ${max} au plus` : `${n} ligne(s)`}">${max && n === max ? '✓ ' : ''}${n}</span>` : ''}</div>`
+      }).join('')
+    : '<p class="text-muted" style="font-size:12.5px;padding:8px">Les photos ouvertes s’affichent ici, avec le nombre de lignes saisies.</p>'
+}
+$('#listePhotos').addEventListener('click', (e) => { const d = e.target.closest('div[data-nom]'); if (d) afficherPhoto(d.dataset.nom) })
+function afficherPhoto(nom) { photoCourante = nom; visionSaisie.afficher(nom); majListePhotos(); nouvelleLigne() }
+
+// ── Changement de service ────────────────────────────────────
+$('#service').innerHTML = Object.entries(REGISTRES).map(([code, r]) => `<option value="${code}">${echapper(r.nom)}</option>`).join('')
+$('#service').value = etat.service
+$('#service').addEventListener('change', (e) => {
+  etat.service = e.target.value; edition = null
+  sauver(); construireFormulaire(); majSuggestions(); majListePhotos(); nouvelleLigne()
+  if ($('#vueControle').classList.contains('visible')) afficherControle()
+  if ($('#vueIndicateurs').classList.contains('visible')) afficherIndicateurs()
+})
+
+// ── CSV (un fichier par service) ─────────────────────────────
+const csvCellule = (v) => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
+function telecharger(nomFichier, lignes) {
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(new Blob(['﻿' + lignes.join('\r\n')], { type: 'text/csv;charset=utf-8' }))
+  a.download = nomFichier; a.click(); URL.revokeObjectURL(a.href)
+}
+$('#exporter').onclick = () => {
+  const lignes = lignesService()
+  if (!lignes.length) { message(`Aucune ligne saisie en ${registre().nom}.`, 'alerte'); return }
+  telecharger(`registre-${etat.service.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`, [
+    ['Identifiant ligne', ...colonnes().map((c) => c.l)].map(csvCellule).join(';'),
+    ...lignes.map((l) => [identifiant(l), ...colonnes().map((c) => l[c.k])].map(csvCellule).join(';'))
+  ])
+  message(`${lignes.length} ligne(s) de ${registre().nom} exportée(s).`)
+}
+function lireCsv(texte) {
+  const lignes = []; let ligne = [], champ = '', guil = false
+  texte = texte.replace(/^﻿/, '')
+  for (let i = 0; i < texte.length; i++) {
+    const c = texte[i]
+    if (guil) { if (c === '"' && texte[i + 1] === '"') { champ += '"'; i++ } else if (c === '"') guil = false; else champ += c }
+    else if (c === '"') guil = true
+    else if (c === ';') { ligne.push(champ); champ = '' }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && texte[i + 1] === '\n') i++; ligne.push(champ); champ = ''; lignes.push(ligne); ligne = [] }
+    else champ += c
+  }
+  if (champ || ligne.length) { ligne.push(champ); lignes.push(ligne) }
+  return lignes.filter((l) => l.some((x) => x.trim()))
+}
+$('#importer').addEventListener('change', async (e) => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return
+  const lignes = lireCsv(await f.text()), entete = lignes.shift() ?? []
+  const { index, extra } = correspondanceColonnes(entete)
+  if (index.filter((i) => i >= 0).length < colonnes().length / 2) {
+    message(`Ce fichier ne correspond pas au registre de ${registre().nom}. Choisissez le bon service avant de le reprendre.`, 'alerte'); return
+  }
+  const nouvelles = lignes.map((v) => {
+    const l = { photo: '', service: etat.service }
+    colonnes().forEach((c, j) => { l[c.k] = index[j] >= 0 ? String(v[index[j]] ?? '').trim() : '' })
+    completerLigne(l, v, extra)
+    return l
+  })
+  // Import incrémental : seules les lignes jamais vues sont ajoutées. Une ligne est « déjà là » si elle a le même
+  // identifiant (service + mois + N° d'ordre) ou, à défaut d'identifiant, exactement le même contenu.
+  const avant = lignesService().length, deja = new Set(lignesService().map(cleLigne))
+  const ajoutees = []
+  for (const l of nouvelles) {
+    if (!colonnes().some((c) => String(l[c.k] ?? '').trim())) continue        // ligne vide
+    const k = cleLigne(l); if (deja.has(k)) continue
+    deja.add(k); ajoutees.push(l)                                              // évite aussi les doublons du fichier
+  }
+  etat.lignes = etat.lignes.concat(ajoutees)
+  trierLignes()
+  sauver(); majSuggestions(); majListePhotos(); nouvelleLigne()
+  message(ajoutees.length
+    ? `${ajoutees.length} nouvelle(s) ligne(s) ajoutée(s) en ${registre().nom} · ${nouvelles.length - ajoutees.length} déjà présente(s), ignorée(s). Total : ${avant + ajoutees.length}.`
+    : `Rien de nouveau : les ${nouvelles.length} ligne(s) du fichier sont déjà dans ${registre().nom}.`)
+})
+// Colonnes du CSV → colonnes du registre. Un fichier transcrit ailleurs peut nommer autrement les mêmes
+// colonnes (« Quartier » pour « Domicile », « Montant » pour « Prix »…) : on compare les noms sans accents ni
+// ponctuation, puis avec une liste de synonymes. Les colonnes en plus (signes et symptômes, transfusion,
+// devenir, observations, Dg TB) ne sont pas perdues : completerLigne les range dans la ligne.
+const normCol = (t) => String(t ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')
+const SYNONYMES = {
+  date_enregistrement: ['date', 'datedenregistrement', 'dateenregistrement'], ancien_nouveau: ['na', 'an', 'nouveauancien'],
+  domicile: ['quartier', 'residence'], diagnostic: ['diagnosticdentree', 'dgentree', 'diagnosticentree'], bilan: ['bilan', 'bilandemande'],
+  t3_recu: ['traitementrecu', 't3recu', 'traitement'], ge_tdr: ['getdr', 'tdrge', 'getdrpalu'], diagnostic_sortie: ['dgsortie', 'diagnosticdesortie'],
+  t3_sortie: ['traitementdesortie', 't3sortie'], nb_jours: ['nombredejours', 'nbjours', 'nbredejours', 'nbjour'], prix: ['montant', 'prix'],
+  observation: ['devenir', 'issue', 'observation'], remarque: ['remarquedesaisie', 'remarque'],
+}
+function correspondanceColonnes(entete) {
+  const n = entete.map(normCol)
+  const index = colonnes().map((c) => { let i = n.indexOf(normCol(c.l)); for (const s of SYNONYMES[c.k] ?? []) if (i < 0) i = n.indexOf(s); return i })
+  const pris = new Set(index), trouve = (...noms) => noms.map((x) => n.indexOf(x)).find((i) => i >= 0 && !pris.has(i)) ?? -1
+  return { index, extra: { symptomes: trouve('signesetsymptomes', 'signessymptomes', 'symptomes'), transfusion: trouve('transfusion'), observations: trouve('observations'), dgtb: trouve('dgtb') } }
+}
+function completerLigne(l, v, extra) {
+  const val = (i) => (i >= 0 ? String(v[i] ?? '').trim() : '')
+  const sympt = val(extra.symptomes)
+  if (sympt && sympt !== '-') l.diagnostic = !l.diagnostic || l.diagnostic === '=' ? sympt : `${l.diagnostic} (${sympt})`
+  const tr = val(extra.transfusion)
+  if (tr && !/^(-|non|0)$/i.test(tr) && !/transfus/i.test(l.t3_recu ?? '')) l.t3_recu = [l.t3_recu, 'Transfusion'].filter(Boolean).join(' + ')
+  const notes = [val(extra.observations), val(extra.dgtb) && val(extra.dgtb) !== '-' ? `Dg TB : ${val(extra.dgtb)}` : ''].filter(Boolean)
+  if (notes.length) l.remarque = [l.remarque, ...notes].filter(Boolean).join(' · ')
+}
+// Clé de comparaison d'une ligne : identifiant, sinon tout son contenu (colonnes du registre).
+function cleLigne(l) { return identifiant(l) || `contenu:${l.service}|${colonnes().map((c) => String(l[c.k] ?? '').trim()).join('|')}` }
+// Classement « comme de base » : par service, puis date d'enregistrement, puis N° d'ordre (01, 02, …, 12, 12bis…).
+function trierLignes() {
+  const cle = (l) => {
+    const reg = REGISTRES[l.service], d = reg ? lireDate(l[reg.dateReference] || l.date_entree || '') : null
+    const n = String(reg ? l[reg.ordre] ?? '' : '').match(/(\d+)\s*(\D*)/)
+    return [l.service, d ? jourNum(d.d) : Infinity, n ? +n[1] : Infinity, n ? n[2].trim() : '']
+  }
+  const tri = etat.lignes.map((l, i) => ({ l, i, k: cle(l) }))
+  tri.sort((a, b) => { for (let t = 0; t < 4; t++) { if (a.k[t] < b.k[t]) return -1; if (a.k[t] > b.k[t]) return 1 } return a.i - b.i })
+  etat.lignes = tri.map((x) => x.l)
+}
+
+// ── Sauvegarde complète (.json) et restauration ──────────────
+// Le fichier contient l'état entier de l'outil (toutes les lignes de tous les services + le contexte) ;
+// une empreinte (FNV-1a 32 bits) des lignes permet de vérifier, à la restauration, que le fichier est intact.
+const FORMAT_SAUVEGARDE = 'nera-saisie-sauvegarde'
+function empreinte(texte) { let h = 0x811c9dc5; for (let i = 0; i < texte.length; i++) { h ^= texte.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0 } return h.toString(16).padStart(8, '0') }
+function signatureLignes() { return `${etat.lignes.length}-${empreinte(JSON.stringify(etat.lignes))}` }
+function resumeLignes(lignes) {
+  const r = {}
+  for (const l of lignes) {
+    const s = (r[l.service] ??= { n: 0, min: null, max: null })
+    s.n++
+    const reg = REGISTRES[l.service], d = reg ? lireDate(l[reg.dateReference] || l.date_entree || '') : null
+    if (d) { const k = versDate(jourNum(d.d)); if (!s.min || k < s.min) s.min = k; if (!s.max || k > s.max) s.max = k }
+  }
+  return Object.fromEntries(Object.entries(r).map(([k, v]) => [k, { n: v.n, du: v.min, au: v.max }]))
+}
+const nomService = (k) => REGISTRES[k]?.nom ?? `${k} (service inconnu de cette version)`
+const tableResume = (res) => `<div class="table-wrap"><table class="table"><thead><tr><th>Service</th><th class="num">Lignes</th><th>Première date</th><th>Dernière date</th></tr></thead><tbody>
+  ${Object.entries(res).map(([k, v]) => `<tr style="cursor:default"><td>${echapper(nomService(k))}</td><td class="num">${v.n}</td><td>${v.du ? v.du.split('-').reverse().join('/') : '—'}</td><td>${v.au ? v.au.split('-').reverse().join('/') : '—'}</td></tr>`).join('') || '<tr><td colspan="4" class="text-muted">Aucune ligne.</td></tr>'}</tbody></table></div>`
+function telechargerJson(nom, objet) {
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(objet, null, 1)], { type: 'application/json' }))
+  a.download = nom; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000)
+}
+function exporterSauvegarde(nom) {
+  const horodatage = new Date()
+  telechargerJson(nom ?? `sauvegarde-saisie-${horodatage.toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`, {
+    format: FORMAT_SAUVEGARDE, version: 1, creee: horodatage.toISOString(),
+    resume: resumeLignes(etat.lignes), empreinte: empreinte(JSON.stringify(etat.lignes)), etat,
+  })
+  etat.derniereSauvegarde = { date: horodatage.toISOString(), signature: signatureLignes() }
+  sauver()
+}
+function majPastille() {
+  const s = etat.derniereSauvegarde, aJour = s && s.signature === signatureLignes()
+  $('#ouvrirSauvegarde').title = aJour ? `Sauvegardé le ${new Date(s.date).toLocaleString('fr-FR')}` : 'Des lignes ne sont pas encore sauvegardées : cliquez pour télécharger la sauvegarde complète.'
+  $('#sauvResume').textContent = !etat.lignes.length ? 'Exportez une copie de vos lignes après chaque séance.'
+    : aJour ? `Tout est sauvegardé (${new Date(s.date).toLocaleDateString('fr-FR')}).` : s ? `Lignes modifiées depuis le ${new Date(s.date).toLocaleDateString('fr-FR')} : pensez à sauvegarder.` : 'Aucune sauvegarde encore : téléchargez-en une.'
+  $('.carte-sauv').classList.toggle('a-faire', !aJour && !!etat.lignes.length)
+}
+function afficherSauvegarde() {
+  const s = etat.derniereSauvegarde, aJour = s && s.signature === signatureLignes()
+  $('#sauvEtat').innerHTML = `<div class="alert ${aJour ? 'ok' : 'warn'}" style="display:block;margin-bottom:10px;font-size:13px">${!etat.lignes.length ? 'Aucune ligne saisie pour l’instant.'
+    : aJour ? `Tout est sauvegardé : dernière sauvegarde complète le <b>${new Date(s.date).toLocaleString('fr-FR')}</b>.`
+    : s ? `Des lignes ont été ajoutées ou modifiées depuis la dernière sauvegarde (${new Date(s.date).toLocaleString('fr-FR')}) : <b>téléchargez une nouvelle sauvegarde</b>.`
+    : '<b>Aucune sauvegarde n’a encore été faite.</b> Vos lignes ne sont que dans ce navigateur : téléchargez la sauvegarde complète.'}</div>
+    <div class="card-kicker">Contenu actuel de l’outil</div>${tableResume(resumeLignes(etat.lignes))}`
+  $('#sauvApercu').innerHTML = ''
+  $('#sauvegarde').classList.add('visible')
+}
+$('#ouvrirSauvegarde').onclick = afficherSauvegarde
+$('#fermerSauvegarde').onclick = () => $('#sauvegarde').classList.remove('visible')
+$('#sauvegarde').addEventListener('click', (e) => { if (e.target.id === 'sauvegarde') $('#sauvegarde').classList.remove('visible') })
+$('#exporterTout').onclick = () => {
+  if (!etat.lignes.length) { $('#sauvApercu').innerHTML = ''; alert('Aucune ligne à sauvegarder.'); return }
+  exporterSauvegarde(); afficherSauvegarde()
+}
+$('#exporterCsvTous').onclick = () => {
+  const services = [...new Set(etat.lignes.map((l) => l.service))].filter((k) => REGISTRES[k])
+  if (!services.length) { alert('Aucune ligne à exporter.'); return }
+  services.forEach((k, i) => setTimeout(() => {
+    const reg = REGISTRES[k], L = etat.lignes.filter((l) => l.service === k)
+    telecharger(`registre-${k.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`, [
+      ['Identifiant ligne', ...reg.colonnes.map((c) => c.l)].map(csvCellule).join(';'),
+      ...L.map((l) => [identifiant(l), ...reg.colonnes.map((c) => l[c.k])].map(csvCellule).join(';'))])
+  }, i * 400))
+}
+let sauvegardeLue = null
+$('#restaurer').addEventListener('change', async (e) => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return
+  let o
+  try { o = JSON.parse(await f.text()) } catch { $('#sauvApercu').innerHTML = '<div class="alert crit" style="display:block">Ce fichier n’est pas une sauvegarde lisible (JSON invalide).</div>'; return }
+  if (o?.format !== FORMAT_SAUVEGARDE || !Array.isArray(o.etat?.lignes)) { $('#sauvApercu').innerHTML = '<div class="alert crit" style="display:block">Ce fichier n’est pas une sauvegarde de l’outil de saisie.</div>'; return }
+  const intact = empreinte(JSON.stringify(o.etat.lignes)) === o.empreinte, inconnus = [...new Set(o.etat.lignes.map((l) => l.service))].filter((k) => !REGISTRES[k])
+  sauvegardeLue = o
+  $('#sauvApercu').innerHTML = `<div style="margin-top:6px;font-size:13px"><b>${echapper(f.name)}</b> · créée le ${new Date(o.creee).toLocaleString('fr-FR')} · <b>${o.etat.lignes.length}</b> ligne(s)
+      ${intact ? '<span class="ind-badge oui">fichier intact</span>' : '<span class="ind-badge non">empreinte différente : fichier modifié à la main ou abîmé</span>'}</div>
+    ${tableResume(resumeLignes(o.etat.lignes))}
+    ${inconnus.length ? `<div class="alert warn" style="display:block;margin-top:8px;font-size:12.5px">Service(s) inconnu(s) de cette version de l’outil : ${inconnus.map(echapper).join(', ')}. Leurs lignes seront gardées mais pas affichées.</div>` : ''}
+    <div class="row" style="gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" data-restaurer="remplacer">Remplacer tout par cette sauvegarde</button>
+      <button class="btn btn-secondary btn-sm" data-restaurer="fusionner">Ajouter seulement les lignes manquantes</button>
+    </div>
+    <p class="text-muted" style="font-size:12px;margin:6px 0 0">« Remplacer » : l’outil redevient exactement comme au moment de la sauvegarde (une copie de l’état actuel est d’abord téléchargée, par sécurité).
+      « Ajouter » : garde vos lignes actuelles et ajoute celles de la sauvegarde qui manquent (même date et même N° d’ordre = doublon ignoré).</p>`
+})
+$('#sauvApercu').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-restaurer]'); if (!b || !sauvegardeLue) return
+  const o = sauvegardeLue
+  if (b.dataset.restaurer === 'remplacer') {
+    if (etat.lignes.length && !confirm(`Remplacer vos ${etat.lignes.length} ligne(s) actuelles par les ${o.etat.lignes.length} de la sauvegarde ?\nUne copie de l’état actuel va d’abord être téléchargée.`)) return
+    if (etat.lignes.length) exporterSauvegarde(`avant-restauration-${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.json`)
+    etat = { lignes: [], rotations: {}, epingles: {}, controles: {}, service: null, ...o.etat }
+    etat.derniereSauvegarde = { date: o.creee, signature: signatureLignes() }
+  } else {
+    let ajoutees = 0
+    for (const k of new Set(o.etat.lignes.map((l) => l.service))) {
+      // Clé : identifiant (date + N°), ou tout le contenu de la ligne quand l'identifiant manque.
+      const cle = (l) => identifiant(l) || `contenu:${JSON.stringify(l)}`
+      const deja = new Set(etat.lignes.filter((l) => l.service === k).map(cle))
+      for (const l of o.etat.lignes.filter((x) => x.service === k)) { const c = cle(l); if (deja.has(c)) continue; deja.add(c); etat.lignes.push(l); ajoutees++ }
+    }
+    // Contexte : on complète ce qui manque sans écraser vos réglages actuels.
+    for (const cle of ['lits', 'epingles', 'indOptions']) etat[cle] = { ...(o.etat[cle] ?? {}), ...(etat[cle] ?? {}) }
+    trierLignes()
+    alert(`${ajoutees} ligne(s) ajoutée(s) · ${o.etat.lignes.length - ajoutees} déjà présente(s).`)
+  }
+  if (!REGISTRES[etat.service]) etat.service = Object.keys(REGISTRES)[0]
+  edition = null; sauvegardeLue = null
+  $('#service').value = etat.service
+  sauver(); construireFormulaire(); majSuggestions(); majListePhotos(); nouvelleLigne()
+  if ($('#vueControle').classList.contains('visible')) afficherControle()
+  if ($('#vueIndicateurs').classList.contains('visible')) afficherIndicateurs()
+  afficherSauvegarde()
+  message(`Sauvegarde restaurée : ${etat.lignes.length} ligne(s) au total. Les indicateurs sont recalculés.`)
+})
+
+// ── 2 · Contrôle qualité ─────────────────────────────────────
+// controle = { ids: [index des lignes tirées], position, faux: { index: [colonnes fausses] }, faites: [index vérifiés] }
+const visionControle = creerVisionneuse($('#visionneuseControle'))
+const colonnesControlees = () => colonnes().filter((c) => c.k !== 'remarque')
+const controle = () => etat.controles[etat.service]
+
+function tirerEchantillon(pourcent) {
+  const indices = etat.lignes.map((l, i) => (l.service === etat.service ? i : -1)).filter((i) => i >= 0)
+  for (let i = indices.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [indices[i], indices[j]] = [indices[j], indices[i]] }
+  etat.controles[etat.service] = { ids: indices.slice(0, Math.max(1, Math.round(indices.length * pourcent / 100))), position: 0, faux: {}, faites: [] }
+  sauver(); afficherControle()
+}
+
+function resultats() {
+  const c = controle(), faites = c.faites.filter((i) => etat.lignes[i])
+  const parColonne = colonnesControlees().map((col) => {
+    const e = faites.filter((i) => (c.faux[i] ?? []).includes(col.k)).length
+    return { colonne: col.l, erreurs: e, taux: faites.length ? 100 * e / faites.length : 0 }
+  })
+  const cases = faites.length * colonnesControlees().length
+  const total = parColonne.reduce((a, x) => a + x.erreurs, 0)
+  return { lignes: faites.length, parColonne, global: cases ? 100 * total / cases : 0, total }
+}
+
+function afficherControle() {
+  const p = $('#panneauControle'), c = controle()
+  const nbLignes = lignesService().length
+  if (!c) {
+    visionControle.afficher(null)
+    p.innerHTML = `
+      <div class="card-kicker">Contrôle qualité · ${echapper(registre().nom)}</div>
+      <h4>Vérifier la saisie sur un échantillon</h4>
+      <p style="font-size:13.5px">L’outil tire au hasard des lignes déjà saisies. Pour chacune, vous la comparez à la photo
+        et vous signalez les cases mal recopiées. Il en sort le <b>taux d’erreur de saisie</b>, à citer dans le mémoire.</p>
+      <ol class="etapes" style="margin:var(--space-4) 0">
+        <li><span>Choisissez la taille de l’échantillon : 10 % suffit en général.</span></li>
+        <li><span>Pour chaque ligne tirée, cliquez sur les cases <b>fausses</b> (elles deviennent rouges), puis « Ligne suivante ».</span></li>
+        <li><span>À la fin, exportez les résultats.</span></li>
+      </ol>
+      ${nbLignes ? '' : '<div class="alert warn" style="margin-bottom:var(--space-3)">Aucune ligne saisie dans ce service pour l’instant.</div>'}
+      <div class="row">
+        <label class="field" style="display:flex;align-items:center;gap:8px"><span style="margin:0">Échantillon</span>
+          <input id="pourcent" class="input" type="number" min="1" max="100" value="10" style="width:76px;min-height:38px"> %</label>
+        <button id="tirer" class="btn btn-primary" ${nbLignes ? '' : 'disabled'}>Tirer au hasard</button>
+      </div>
+      <p class="text-muted" style="font-size:12.5px;margin-top:8px">${nbLignes} ligne(s) saisie(s) dans ce service.</p>`
+    $('#tirer')?.addEventListener('click', () => tirerEchantillon(Math.min(100, Math.max(1, +$('#pourcent').value || 10))))
+    return
+  }
+
+  const r = resultats(), fini = c.faites.length >= c.ids.length
+  const i = c.ids[c.position], l = etat.lignes[i]
+  visionControle.afficher(l?.photo)
+  const fausses = c.faux[i] ?? []
+  const bilan = `
+    <div class="card-kicker" style="margin-top:var(--space-4)">Résultat · ${r.lignes} ligne(s) vérifiée(s)</div>
+    ${r.lignes ? `<p style="font-size:13.5px;margin-bottom:6px">Taux d’erreur global : <b>${r.global.toFixed(1)} %</b> des cases
+      (${r.total} case(s) fausse(s) sur ${r.lignes * colonnesControlees().length}).</p>
+      ${r.parColonne.map((x) => `<div class="resultat"><span>${echapper(x.colonne)}</span>
+        <div class="bar ${x.taux > 5 ? 'sev-1' : 'sev-4'}"><span style="width:${Math.max(x.taux, x.taux ? 3 : 0)}%"></span></div>
+        <span style="text-align:right">${x.taux.toFixed(1)} %</span></div>`).join('')}
+      <p class="text-muted" style="font-size:12.5px">Une colonne au-dessus de 5 % est à revérifier en entier.</p>`
+    : '<p class="text-muted" style="font-size:13px">Les taux apparaissent dès la première ligne vérifiée.</p>'}
+    <div class="row" style="margin-top:var(--space-3)">
+      <button id="exporterControle" class="btn btn-secondary btn-sm" ${r.lignes ? '' : 'disabled'}>Exporter les résultats</button>
+      <button id="recommencer" class="btn btn-ghost btn-sm">Nouveau tirage</button>
+    </div>`
+
+  p.innerHTML = `
+    <div class="card-kicker">Contrôle qualité · ${echapper(registre().nom)}</div>
+    <h4>${fini ? 'Contrôle terminé' : `Ligne ${c.position + 1} sur ${c.ids.length}`}</h4>
+    <div class="bar" style="margin-bottom:var(--space-3)"><span style="width:${100 * c.faites.length / c.ids.length}%"></span></div>
+    ${!l ? '<div class="alert warn">Cette ligne a été supprimée depuis le tirage.</div>' : `
+      ${photos.some((x) => x.nom === l.photo) ? '' : `<div class="alert warn" style="margin-bottom:var(--space-3)">Photo « ${echapper(l.photo)} » non ouverte : cliquez sur « Ouvrir les photos ».</div>`}
+      <p class="text-muted" style="font-size:12.5px">Photo ${echapper(l.photo)} · ligne n° ${echapper(l[registre().ordre] || '?')}. Cliquez sur chaque case <b>mal recopiée</b>.</p>
+      <div id="cases">${colonnesControlees().map((col) => `
+        <div class="controle${fausses.includes(col.k) ? ' faux' : ''}" data-k="${col.k}" style="cursor:pointer">
+          <div><div class="lib">${echapper(col.l)}</div><div class="valeur">${echapper(l[col.k]) || '<span class="text-muted" style="font-weight:500">vide</span>'}</div></div>
+          <span class="tag ${fausses.includes(col.k) ? 'tag-sev-1' : 'tag-neutral'}">${fausses.includes(col.k) ? 'Erreur' : 'Correct'}</span>
+        </div>`).join('')}</div>`}
+    <div class="row" style="margin:var(--space-3) 0">
+      <button id="precedente" class="btn btn-secondary btn-sm" ${c.position ? '' : 'disabled'}>‹ Précédente</button>
+      <button id="valider" class="btn btn-primary btn-sm">${c.position < c.ids.length - 1 ? 'Ligne vérifiée, suivante ›' : 'Ligne vérifiée'}</button>
+    </div>
+    ${bilan}`
+
+  $('#cases')?.addEventListener('click', (e) => {
+    const d = e.target.closest('[data-k]'); if (!d) return
+    const liste = c.faux[i] ?? []
+    c.faux[i] = liste.includes(d.dataset.k) ? liste.filter((k) => k !== d.dataset.k) : [...liste, d.dataset.k]
+    if (!c.faites.includes(i)) c.faites.push(i)
+    sauver(); afficherControle()
+  })
+  $('#valider').onclick = () => {
+    if (!c.faites.includes(i)) c.faites.push(i)
+    c.position = Math.min(c.position + 1, c.ids.length - 1)
+    sauver(); afficherControle()
+  }
+  $('#precedente').onclick = () => { c.position = Math.max(0, c.position - 1); sauver(); afficherControle() }
+  $('#recommencer').onclick = () => {
+    if (confirm('Effacer ce contrôle et tirer un nouvel échantillon ?')) { delete etat.controles[etat.service]; sauver(); afficherControle() }
+  }
+  $('#exporterControle').onclick = () => telecharger(`controle-qualite-${etat.service.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`, [
+    'Colonne;Lignes vérifiées;Cases fausses;Taux d’erreur (%)',
+    ...r.parColonne.map((x) => [x.colonne, r.lignes, x.erreurs, x.taux.toFixed(1)].map(csvCellule).join(';')),
+    ['Toutes colonnes', r.lignes, r.total, r.global.toFixed(1)].map(csvCellule).join(';')
+  ])
+}
+
+// ── 3 · Indicateurs ──────────────────────────────────────────
+// Mêmes définitions que l'application NERA et la chaîne d'analyse (backend/modeles/nera) :
+//   recensement de minuit (un patient compte de son entrée à la veille de sa sortie) ;
+//   sortie absente = entrée + nombre de jours (calculée) ; sans sortie ni nombre de jours :
+//   « encore hospitalisé » si l'admission a moins de 30 jours, sinon durée inconnue (exclu) ;
+//   période exploitable (≥ 90 % de durées connues chaque mois) + rodage ;
+//   période de test final (à partir de CONFIG_SAISIE.dateVerrou) jamais comptée.
+const CONFIG = window.CONFIG_SAISIE ?? {}
+const jourNum = (t) => Math.round(Date.UTC(t.getFullYear(), t.getMonth(), t.getDate()) / 86400000)
+const versDate = (n) => { const d = new Date(n * 86400000); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}` }
+const RE_DECES = /d[ée]c[éèe]d|d[ée]c[eè]s|\bdcd\b/i
+
+// Sorties non écrites : selon le médecin, « n jours » = n nuits (sortie e + n) ou n jours entrée et sortie
+// comprises (sortie e + n − 1). p = part de lignes inclusives, mesurée sur les sorties écrites
+// (p_M = (k_M + 10·p̂) / (n_M + 10) par mois d'admission, p̂ = 0,5 sans aucune ligne mesurable).
+// Occupation attendue : la nuit incertaine e + n − 1 compte pour 1 − p. Bornes : p = 1 (bas), p = 0 (haut).
+// Mêmes calculs que l'application NERA et la chaîne d'analyse (backend/modeles/nera).
+const PSEUDO_LIGNES = 10
+const MAX_NUITS = 90                 // au-delà : erreur d'écriture, durée traitée comme absente (NERA : max_nuits)
+// Réglages du calcul (barre des indicateurs). Les valeurs par défaut sont celles de NERA (chargement.py) :
+//   seuil      part minimale de durées connues dans chaque mois de la période exploitable ;
+//   inconnues  'exclure' (NERA par défaut), 'mediane' (médiane des séjours connus) ou 'estimee' (médiane des séjours
+//              de même prix, sinon de même issue : nera/imputation.py) ;
+//   censure    'fixe' (NERA, 30 jours) ou 'p95' : sans sortie, « encore hospitalisé » seulement si admis depuis moins
+//              de p95 nuits (95 % des séjours sont plus courts) ; au-delà, l'enfant est presque sûrement sorti.
+const METHODE_DEFAUT = { seuil: 0.9, inconnues: 'exclure', censure: 'fixe' }
+// Une date suivie d'un « ? » (doute à la transcription) reste utilisable pour les calculs.
+const lireDateSouple = (v) => lireDate(String(v ?? '').replace(/\s*\?+\s*$/, '').trim())
+function calculerIndicateurs(lits, par, methode = METHODE_DEFAUT) {
+  const lireDate = lireDateSouple
+  const { seuil, inconnues, censure } = { ...METHODE_DEFAUT, ...methode }
+  const r = registre(), cfgV = CONFIG.dateVerrou ? lireDate(CONFIG.dateVerrou.split('-').reverse().join('/')) : null
+  const verrou = cfgV ? jourNum(cfgV.d) : Infinity
+  const moisDe = (j) => versDate(j).slice(0, 7)
+  // SAISIE PROGRESSIVE : les calculs ne portent que sur la période réellement saisie, du premier au
+  // dernier jour d'enregistrement présent dans vos lignes — jamais jusqu'à aujourd'hui. Au-delà du
+  // dernier jour saisi, on ne sait rien : compter ces jours ferait chuter l'occupation à tort.
+  const datesSaisies = lignesService().map((l) => lireDate(l[r.dateReference] || l[r.sortieCalculee?.entree ?? 'date_entree']))
+    .filter(Boolean).map((x) => jourNum(x.d)).filter((j) => j < verrou)
+  if (!datesSaisies.length) return { message: 'Aucune ligne datée pour ce service.', convention: '', statuts: { observee: 0, calculee: 0, censuree: 0, inconnue: 0 } }
+  const premierSaisi = datesSaisies.reduce((a, b) => Math.min(a, b)), dernierSaisi = datesSaisies.reduce((a, b) => Math.max(a, b))
+  // Trous de numérotation : N° d'ordre manquants entre deux lignes consécutives (dans l'ordre d'enregistrement).
+  // Un trou à la fin de la saisie (pages pas encore saisies) ferait baisser l'occupation des derniers jours :
+  // on arrête alors le calcul à la dernière ligne avant ce trou (« saisie continue »). Les trous plus anciens
+  // sont seulement signalés. Une numérotation qui recommence (nouveau mois, nouveau registre) n'est pas un trou.
+  //   Par mois d'enregistrement : numéros absents entre le plus petit et le plus grand présent, regroupés en
+  //   suites ; seule une suite d'au moins 3 numéros compte (un numéro isolé est souvent un « ? » ou un saut).
+  const parMoisNum = {}
+  for (const l of lignesService()) {
+    const dd = lireDate(l[r.dateReference]), nn = parseInt(String(l[r.ordre] ?? '').match(/^\s*(\d+)\s*(bis|ter)?\s*\??\s*$/i)?.[1], 10)
+    if (dd && !Number.isNaN(nn)) (parMoisNum[moisDe(jourNum(dd.d))] ??= new Map()).set(nn, Math.max(parMoisNum[moisDe(jourNum(dd.d))]?.get(nn) ?? -Infinity, jourNum(dd.d)))
+  }
+  const trous = [], manquants = []
+  for (const [mo, nums] of Object.entries(parMoisNum).sort()) {
+    const tri = [...nums.keys()].sort((a, b) => a - b)
+    // Tous les numéros manquants sont signalés ; seule une suite d'au moins 3 numéros peut arrêter le calcul (trou final).
+    for (let i = 1; i < tri.length; i++) if (tri[i] - tri[i - 1] > 1) {
+      const t = { mois: mo, de: tri[i - 1] + 1, a: tri[i] - 1, apres: nums.get(tri[i - 1]), avant: nums.get(tri[i]) }
+      manquants.push(t); if (tri[i] - tri[i - 1] > 3) trous.push(t)
+    }
+  }
+  const trouFinal = trous.filter((t) => t.mois === moisDe(dernierSaisi)).at(0)
+  const coupure = trouFinal ? trouFinal.apres + 1 : Infinity
+  const extraction = Math.min(verrou, dernierSaisi + 1, coupure)   // fin de l'observation = lendemain du dernier jour saisi sans trou
+  const sejours = [], conv = [], rejetees = []
+  let aberrantes = 0, entreesApprochees = 0
+  for (const l of lignesService()) {
+    // « Nombre de jours » plausible seulement : une date (« 31/12/24 ») ou un prix (« 22500 ») recopié
+    // dans cette case donnerait un séjour de plusieurs années. Même garde-fou que NERA (max_nuits).
+    const texteJours = String(l[r.sortieCalculee?.jours ?? 'nb_jours'] ?? '')
+    let n = parseInt((texteJours.match(/\d+/) ?? [])[0], 10)
+    if (!Number.isNaN(n) && (texteJours.includes('/') || n > MAX_NUITS)) { n = NaN; aberrantes++ }
+    // Date d'entrée illisible (« 0?/03/25 ») : la ligne n'est pas perdue. Entrée = sortie écrite − nombre
+    // de jours si les deux sont lus (sans dépasser la date d'enregistrement), sinon date d'enregistrement.
+    const enreg = lireDate(l[r.dateReference]), texteEntree = l[r.sortieCalculee?.entree ?? 'date_entree']
+    let e = lireDate(texteEntree)
+    if (!e && String(texteEntree ?? '').trim() && enreg) {
+      const so = lireDate(l[r.sortieCalculee?.sortie ?? 'date_sortie'])
+      const deduite = so && !Number.isNaN(n) ? Math.min(jourNum(so.d) - n, jourNum(enreg.d)) : null
+      e = deduite !== null && deduite >= jourNum(enreg.d) - MAX_NUITS ? { d: new Date(deduite * 86400000 + 43200000) } : enreg
+      entreesApprochees++
+    }
+    if (!e) e = enreg; if (!e) continue
+    const entree = jourNum(e.d); if (entree >= verrou) continue
+    let ecrite = lireDate(l[r.sortieCalculee?.sortie ?? 'date_sortie'])
+    if (ecrite && jourNum(ecrite.d) - entree > MAX_NUITS) { ecrite = null; aberrantes++ }
+    if (ecrite && !Number.isNaN(n) && jourNum(ecrite.d) < verrou) conv.push({ mois: moisDe(entree), ecart: jourNum(ecrite.d) - entree - n })
+    let sortie = ecrite ? jourNum(ecrite.d) : Number.isNaN(n) ? null : entree + n
+    if (sortie !== null && sortie >= verrou) sortie = null            // sortie inconnue au jour du verrou
+    const calculee = !ecrite && sortie !== null
+    if (sortie !== null && sortie < entree) { rejetees.push(l); continue }
+    sejours.push({ l, entree, sortie, calculee, basse: calculee ? Math.max(entree, sortie - 1) : sortie, deces: sortie !== null && RE_DECES.test(l.observation ?? '') })
+  }
+  // Durées connues (nuits), triées : servent au p95 (rodage, fenêtre « encore hospitalisé ») et à la médiane.
+  const connues = sejours.filter((x) => x.sortie !== null).map((x) => x.sortie - x.entree).sort((a, b) => a - b)
+  const quantileDe = (v, q) => { if (!v.length) return null; const pos = q * (v.length - 1), b = Math.floor(pos), h = Math.ceil(pos); return v[b] + (v[h] - v[b]) * (pos - b) }
+  const quantile = (q) => quantileDe(connues, q)
+  const p95 = connues.length ? Math.floor(quantile(0.95)) : 30, mediane = connues.length ? Math.round(quantile(0.5)) : null
+  const fenetreCensure = censure === 'p95' ? Math.max(7, p95) : (CONFIG.fenetreCensure ?? 30)
+  // Estimation des durées inconnues (même méthode que nera/imputation.py) : médiane, 1er et 3e quartile
+  // des séjours connus de même prix (au moins 5), sinon de même issue, sinon de tout le service.
+  const resume = (v) => { const t = v.slice().sort((a, b) => a - b); return { med: Math.round(quantileDe(t, 0.5)), q1: Math.floor(quantileDe(t, 0.25)), q3: Math.ceil(quantileDe(t, 0.75)) } }
+  const classes = (cle) => { const g = {}; for (const x of sejours) if (x.sortie !== null) { const k = cle(x.l); if (k !== null) (g[k] ??= []).push(x.sortie - x.entree) }
+    return Object.fromEntries(Object.entries(g).filter(([, v]) => v.length >= 5).map(([k, v]) => [k, resume(v)])) }
+  const prixDe = (l) => { const m = String(l.prix ?? '').replace(/[\s. ]/g, '').match(/\d{3,6}/); return m ? +m[0] : null }
+  const issueLigne = (l) => { const i = issueDe(l); return i === 'Non renseignée' ? null : i }
+  const parPrix = inconnues === 'estimee' ? classes(prixDe) : {}, parIssue = inconnues === 'estimee' ? classes(issueLigne) : {}
+  const global = connues.length ? resume(connues) : null, sources = { prix: 0, issue: 0, mediane: 0 }
+  const estimer = (l) => { const p = prixDe(l), i = issueLigne(l)
+    if (p !== null && parPrix[p]) { sources.prix++; return parPrix[p] }
+    if (i !== null && parIssue[i]) { sources.issue++; return parIssue[i] }
+    sources.mediane++; return global }
+  for (const x of sejours) {
+    if (x.sortie !== null) x.statut = x.calculee ? 'calculee' : 'observee'
+    // Un enfant dont le départ est écrit (sortie, SCAM, décès, référé, évadé, MEO) n'est jamais « encore
+    // hospitalisé », même entré récemment : sans date ni nombre de jours, sa durée est inconnue (ou estimée).
+    else if (x.entree >= extraction - fenetreCensure && issueDe(x.l) === 'Non renseignée') x.statut = 'censuree'
+    else if (inconnues !== 'exclure' && global) {
+      const est = estimer(x.l)
+      Object.assign(x, { statut: 'imputee', sortie: x.entree + est.med, basse: x.entree + est.med, impBas: x.entree + est.q1, impHaut: x.entree + est.q3 })
+    }
+    else x.statut = 'inconnue'
+    x.nuits = x.statut === 'inconnue' ? null : (x.sortie ?? extraction) - x.entree
+  }
+  // Part inclusive, globale puis par mois d'admission
+  const k = conv.filter((x) => x.ecart === -1).length, m = conv.filter((x) => x.ecart === 0).length
+  const pGlobal = k + m ? k / (k + m) : null, p0 = pGlobal ?? 0.5
+  const parMoisConv = {}
+  for (const x of conv) { const g = (parMoisConv[x.mois] ??= [0, 0]); if (x.ecart === -1) g[0]++; if (x.ecart === -1 || x.ecart === 0) g[1]++ }
+  const pMois = (mo) => parMoisConv[mo] ? (parMoisConv[mo][0] + PSEUDO_LIGNES * p0) / (parMoisConv[mo][1] + PSEUDO_LIGNES) : p0
+  for (const x of sejours) x.p = x.statut === 'calculee' ? pMois(moisDe(x.entree)) : 0
+  const convention = pGlobal === null
+    ? 'Aucune ligne n’a à la fois une date de sortie écrite et un nombre de jours : on prend 50 % de lignes inclusives. La fourchette reste valable.'
+    : `${Math.round(100 * pGlobal)} % des ${k + m} lignes avec une sortie écrite comptent le jour d’entrée et le jour de sortie, ${Math.round(100 * (1 - pGlobal))} % comptent les nuits${conv.length > k + m ? ` (${conv.length - k - m} ligne(s) incohérente(s) ignorée(s))` : ''}. Les sorties non écrites sont comptées avec cette proportion.`
+  const statuts = { observee: 0, calculee: 0, censuree: 0, imputee: 0, inconnue: 0 }
+  sejours.forEach((x) => statuts[x.statut]++)
+  const partisSansDuree = sejours.filter((x) => x.sortie === null && issueDe(x.l) !== 'Non renseignée').length
+  const reglages = { partisSansDuree, seuil, inconnues, censure, fenetreCensure, mediane, p95, rejetees: rejetees.length, aberrantes, entreesApprochees, sources, trous, manquants, trouFinal, dernierSaisi: versDate(dernierSaisi) }
+  if (!sejours.length) return { message: 'Aucune ligne datée pour ce service.', convention, statuts, reglages }
+
+  // Période exploitable : à partir du premier mois après lequel TOUS les mois ont au moins « seuil » de durées connues.
+  const parMois = {}
+  for (const x of sejours) { const mo = moisDe(x.entree); (parMois[mo] ??= [0, 0])[0]++; if (x.statut !== 'inconnue') parMois[mo][1]++ }
+  const mois = Object.keys(parMois).sort()
+  const qualiteMois = mois.map((mo) => ({ mois: mo, lignes: parMois[mo][0], connues: parMois[mo][1], part: parMois[mo][1] / parMois[mo][0] }))
+  const bloquants = qualiteMois.filter((q) => q.part < seuil)
+  Object.assign(reglages, { qualiteMois, bloquants })
+  const pct = `${Math.round(100 * seuil)} %`
+  const i0 = mois.findIndex((_, i) => mois.slice(i).every((mo) => parMois[mo][1] / parMois[mo][0] >= seuil))
+  if (i0 < 0) return { message: `Aucun mois à partir duquel la durée de séjour est renseignée pour au moins ${pct} des patients.`, convention, statuts, reglages }
+  // Rodage : les enfants entrés AVANT le premier jour saisi (ou avant le premier mois complet) sont
+  // absents de vos lignes mais présents dans le service. On attend qu'ils soient sortis (95 % des
+  // séjours durent moins que p95 nuits) avant de compter l'occupation, sinon le début serait trop bas.
+  const rodage = Math.max(14, p95)
+  const base = Math.max(jourNum(new Date(`${mois[i0]}-01T12:00:00`)), premierSaisi)
+  const debut = base + rodage, fin = extraction - 1
+  if (fin < debut) return { message: `Période exploitable encore trop courte : les ${rodage} premiers jours saisis servent de rodage (enfants entrés avant le début de votre saisie). Continuez la saisie au-delà du ${versDate(debut).split('-').reverse().join('/')}.`, convention, statuts, reglages }
+
+  // Fins possibles d'un séjour selon le scénario (poids w sur e + n − 1, 1 − w sur e + n).
+  // Une sortie estimée compte dans l'occupation mais pas dans la DMS ni les durées (reelle = false) ;
+  // ses bornes sont les quartiles de sa classe (bas : q1, haut : q3), comme dans nera/occupation.py.
+  const exploitables = sejours.filter((x) => x.statut !== 'inconnue')
+  const fins = (w, cote = 'attendu') => exploitables.flatMap((x) => {
+    if (x.sortie === null) return [{ x, jour: extraction, poids: 1, reelle: false }]
+    if (x.statut === 'imputee') return [{ x, jour: cote === 'bas' ? x.impBas : cote === 'haut' ? x.impHaut : x.sortie, poids: 1, reelle: false }]
+    const wb = x.statut === 'calculee' && x.basse < x.sortie ? w(x) : 0, reelle = x.statut !== 'imputee'
+    return [...(wb > 0 ? [{ x, jour: x.basse, poids: wb, reelle }] : []), ...(1 - wb > 0 ? [{ x, jour: x.sortie, poids: 1 - wb, reelle }] : [])]
+  })
+  // Recensement de minuit : +1 à l'entrée, −poids à chaque fin possible ; ce qui précède le début est cumulé au départ.
+  const n = fin - debut + 1, adm = new Array(n).fill(0)
+  for (const x of exploitables) { const e = x.entree - debut; if (e >= 0 && e < n) adm[e]++ }
+  const recenser = (liste) => {
+    const delta = new Array(n).fill(0); let avant = 0
+    for (const x of exploitables) { const e = x.entree - debut; if (e < 0) avant += 1; else if (e < n) delta[e] += 1 }
+    for (const f of liste) { const o = f.jour - debut; if (o < 0) avant -= f.poids; else if (o < n) delta[o] -= f.poids }
+    const res = []; let c = avant
+    for (let i = 0; i < n; i++) { c += delta[i]; res.push(Math.round(c * 1e10) / 1e10) }
+    return res
+  }
+  const finsAttendues = fins((x) => x.p)
+  const presents = recenser(finsAttendues), bas = recenser(fins(() => 1, 'bas')), haut = recenser(fins(() => 0, 'haut'))
+  const termines = finsAttendues.filter((f) => f.reelle && f.jour > debut && f.jour <= fin + 1)
+  // Regroupement des indicateurs : jour, semaine (commençant le lundi), mois ou année.
+  const cle = (j) => (par === 'annee' ? versDate(j).slice(0, 4) : par === 'jour' ? versDate(j) : par === 'semaine' ? `S${versDate(j - ((new Date(j * 86400000).getUTCDay() + 6) % 7))}` : moisDe(j))
+  const arr = (v, k2 = 1) => Math.round(v * 10 ** k2) / 10 ** k2
+  const somme = (idx, serie) => idx.reduce((a, i) => a + serie[i], 0)
+  const bloc = (periode, idx, sorties) => {
+    const J = idx.length, JH = somme(idx, presents), ns = sorties.reduce((a, f) => a + f.poids, 0)
+    const dc = sorties.filter((f) => f.x.deces).reduce((a, f) => a + f.poids, 0)
+    const tom = (serie) => lits && J ? arr(100 * somme(idx, serie) / (lits * J)) : null
+    return { periode, J, adm: idx.reduce((a, i) => a + adm[i], 0), ns: arr(ns, 2), JH: arr(JH, 2),
+      tom: tom(presents), tomBas: tom(bas), tomHaut: tom(haut), max: J ? arr(Math.max(...idx.map((i) => presents[i])), 2) : 0,
+      sur: lits ? idx.filter((i) => presents[i] > lits).length : 0,
+      dms: ns ? arr(sorties.reduce((a, f) => a + f.poids * (f.jour - f.x.entree), 0) / ns, 2) : null,
+      rot: lits ? arr(ns / lits, 2) : null, inter: lits && ns ? arr((lits * J - JH) / ns, 2) : null,
+      dc: arr(dc, 2), mort: ns ? arr(100 * dc / ns, 2) : null }
+  }
+  const groupes = {}
+  for (let i = 0; i < n; i++) (groupes[cle(debut + i)] ??= []).push(i)
+  const lignes = Object.entries(groupes).map(([kk, idx]) => bloc(kk, idx, termines.filter((f) => cle(f.jour) === kk)))
+  lignes.push(bloc('Total', [...Array(n).keys()], termines))
+  // Où va chaque ligne : seules les sorties DANS la période de calcul entrent dans la DMS et les durées.
+  const repartition = { lignes: sejours.length, inconnues: statuts.inconnue, imputees: statuts.imputee,
+    pendantRodage: exploitables.filter((x) => x.statut !== 'imputee' && x.sortie !== null && x.sortie <= debut).length,
+    encoreHospitalises: exploitables.filter((x) => x.sortie === null).length,
+    dansPeriode: Math.round(termines.reduce((a, f) => a + f.poids, 0)) }
+  return { repartition, convention, statuts, reglages, debut: versDate(debut), fin: versDate(fin), premierMois: mois[i0], rodage, lignes, presents, bas, haut,
+    debutNum: debut, adm, premierSaisi: versDate(premierSaisi), dernierSaisi: versDate(dernierSaisi), base: versDate(base),
+    sorties: termines.map((f) => ({ jour: f.jour, poids: f.poids, nuits: f.jour - f.x.entree, l: f.x.l })),
+    // Tous les séjours (pour la simulation de Monte-Carlo et l'analyse de survie) et la fin de l'observation.
+    sejours, extraction }
+}
+
+// ── Statistiques descriptives de la saisie (toutes les lignes de la période saisie) ──────────
+// Âge → mois : « 11 ans », « 09 mois », « 2 ans ½ », « 1 an 3 mois », « 6 semaines », « 5 j ».
+function ageEnMois(texte) {
+  const t = String(texte ?? '').toLowerCase().replace(',', '.')
+  if (!t.trim() || t.includes('?') && !/\d/.test(t)) return null
+  let mois = 0, trouve = false
+  const a = t.match(/(\d+(?:\.\d+)?)\s*an/); if (a) { mois += 12 * parseFloat(a[1]); trouve = true }
+  if (a && t.includes('½')) mois += 6
+  const m = t.match(/(\d+(?:\.\d+)?)\s*mo/); if (m) { mois += parseFloat(m[1]); trouve = true }
+  const s = t.match(/(\d+)\s*sem/); if (s) { mois += parseInt(s[1], 10) / 4.35; trouve = true }
+  const j = t.match(/(\d+)\s*j/); if (j && !a && !m) { mois += parseInt(j[1], 10) / 30.4; trouve = true }
+  return trouve ? mois : null
+}
+// Issue lue dans « Observation » (et « Remarque » pour les décès écrits en marge).
+function issueDe(l) {
+  // La remarque de saisie ne sert QUE pour les décès écrits en marge : elle contient aussi des notes du
+  // transcripteur (« sortie non renseignée », « Transfusion sanguine en marge ») qui ne sont pas des issues.
+  const t = String(l.observation ?? '').toLowerCase()
+  if (/d[ée]c[éèe]d|d[ée]c[eè]s|\bdcd\b/.test(`${t} ${String(l.remarque ?? '').toLowerCase()}`)) return 'Décès'
+  if (/scam/.test(t)) return 'Sortie contre avis (SCAM)'
+  if (/[ée]vad/.test(t)) return 'Évadé'
+  if (/r[ée]f[ée]r|d[ée]f[ée]r|transf[ée]r/.test(t)) return 'Référé / transféré'
+  if (/\bmeo\b|observation/.test(t)) return 'Mise en observation (MEO)'
+  if (/sorti|ambulatoire|gratuit/.test(t)) return 'Sortie (domicile)'
+  return 'Non renseignée'
+}
+// Grandes causes, comme le « récapitulatif mensuel » du registre (diagnostic de sortie, sinon d'entrée).
+const CAUSES = [
+  ['Paludisme', /\bapg\b|\bap\b|palu|paludisme/], ['Sepsis', /sepsis|septic/], ['Anémie', /an[ée]mie/],
+  ['Gastro-entérite (GEF, diarrhée)', /\bge[af]*\b|gastro|ent[ée]rite|diarrh|dysent|shigell|virose dig/],
+  ['Infection respiratoire basse (pneumonie, bronchite…)', /pneumo|bronch|bp\b|pleur/],
+  ['Rhinopharyngite / ORL (OMA, angine…)', /rhino|pharyng|\boma\b|otite|angine|amygdal|orl|sinus/],
+  ['Infection urinaire', /\biu\b|urinaire/], ['Drépanocytose (CVO)', /cvo|dr[ée]pano/],
+  ['Convulsions / méningite', /convuls|m[ée]ning|comitial|[ée]pilep/], ['Syndrome infectieux', /sd infect|syndrome infect|sirs/],
+  ['Chirurgie (appendicite, hernie, fracture, brûlure…)', /append|hern|fract|br[uû]l|traumat|p[ée]riton|phlegmon|cellulite|[ée]rysip/],
+]
+function causeDe(l) {
+  const t = `${l.diagnostic_sortie || l.diagnostic || ''}`.toLowerCase()
+  if (!t.trim()) return 'Non renseigné'
+  for (const [nom, re] of CAUSES) if (re.test(t)) return nom
+  return 'Autres'
+}
+// Quartier pour les statistiques (la saisie reste telle qu'écrite) : « ? » final retiré, abréviations
+// remplacées (ALIAS_QUARTIERS), puis variantes regroupées (minuscules, sans accents ni ponctuation).
+// Le nom affiché est l'écriture la plus fréquente du groupe.
+const cleQuartier = (t) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')
+let cacheQuartiers = null
+function quartierDe(l) {
+  let t = String(l.domicile || l.residence || '').replace(/\s*\?+\s*$/, '').trim()
+  if (!t || /^\?*$/.test(t)) return null
+  const alias = Object.entries(window.ALIAS_QUARTIERS ?? {}).find(([a]) => cleQuartier(a) === cleQuartier(t))
+  if (alias) t = alias[1]
+  const k = cleQuartier(t)
+  if (!cacheQuartiers || cacheQuartiers.n !== etat.lignes.length) {
+    const comptes = {}
+    for (const x of etat.lignes) {
+      let v = String(x.domicile || x.residence || '').replace(/\s*\?+\s*$/, '').trim(); if (!v) continue
+      const al = Object.entries(window.ALIAS_QUARTIERS ?? {}).find(([a]) => cleQuartier(a) === cleQuartier(v)); if (al) v = al[1]
+      const c = (comptes[cleQuartier(v)] ??= {}); c[v] = (c[v] ?? 0) + 1
+    }
+    cacheQuartiers = { n: etat.lignes.length, noms: Object.fromEntries(Object.entries(comptes).map(([c, v]) => [c, Object.entries(v).sort((a, b) => b[1] - a[1] || /[A-ZÉ]/.test(b[0][0]) - /[A-ZÉ]/.test(a[0][0]))[0][0]])) }
+  }
+  return cacheQuartiers.noms[k] ?? t
+}
+function statistiquesSaisie() {
+  const r = registre(), cfgV = CONFIG.dateVerrou ? lireDate(CONFIG.dateVerrou.split('-').reverse().join('/')) : null
+  const verrou = cfgV ? jourNum(cfgV.d) : Infinity
+  const lignes = lignesService().map((l) => ({ l, d: lireDate(l[r.dateReference] || l.date_entree) }))
+    .filter((x) => x.d && jourNum(x.d.d) < verrou).map((x) => ({ ...x, j: jourNum(x.d.d) }))
+  const compter = (cle) => { const c = {}; for (const x of lignes) { const k = cle(x); c[k] = (c[k] ?? 0) + 1 } return c }
+  const tranche = (x) => { const m = ageEnMois(x.l.age); return m === null ? 'Âge non lisible' : m < 12 ? '0 – 11 mois' : m < 60 ? '12 – 59 mois' : m < 180 ? '5 – 14 ans' : '15 ans et plus' }
+  const sexe = (x) => (/^m/i.test(x.l.sexe ?? '') ? 'M' : /^f/i.test(x.l.sexe ?? '') ? 'F' : '?')
+  const parMois = {}
+  for (const x of lignes) {
+    const mo = versDate(x.j).slice(0, 7), s = (parMois[mo] ??= { malades: 0, M: 0, F: 0, t0: 0, t1: 0, t2: 0, t3: 0, scam: 0, ref: 0, dcd: 0, meo: 0, transf: 0 })
+    s.malades++; const sx = sexe(x); if (sx !== '?') s[sx]++
+    const t = tranche(x); s[t === '0 – 11 mois' ? 't0' : t === '12 – 59 mois' ? 't1' : t === '5 – 14 ans' ? 't2' : 't3']++
+    const i = issueDe(x.l); if (i.startsWith('Sortie contre')) s.scam++; if (i.startsWith('Référé')) s.ref++; if (i === 'Décès') s.dcd++; if (i.startsWith('Mise en obs')) s.meo++
+    if (/transfus/i.test(x.l.t3_recu ?? '')) s.transf++
+  }
+  const ages = { '0 – 11 mois': { M: 0, F: 0 }, '12 – 59 mois': { M: 0, F: 0 }, '5 – 14 ans': { M: 0, F: 0 }, '15 ans et plus': { M: 0, F: 0 } }
+  for (const x of lignes) { const t = tranche(x), s = sexe(x); if (ages[t] && s !== '?') ages[t][s]++ }
+  const semaine = [0, 0, 0, 0, 0, 0, 0]
+  for (const x of lignes) semaine[(new Date(x.j * 86400000).getUTCDay() + 6) % 7]++
+  const issues = compter((x) => issueDe(x.l)), causes = compter((x) => causeDe(x.l))
+  const nbJoursEcrits = lignes.filter((x) => /\d/.test(x.l.nb_jours ?? '')).length
+  const sortiesEcrites = lignes.filter((x) => lireDate(x.l.date_sortie ?? '')).length
+  const agesMois = lignes.map((x) => ageEnMois(x.l.age)).filter((m) => m !== null).sort((a, b) => a - b)
+  const quartiers = compter((x) => quartierDe(x.l) ?? 'Non renseigné')
+  return { n: lignes.length, parMois, ages, semaine, issues, causes, nbJoursEcrits, sortiesEcrites, quartiers,
+    ageMedian: agesMois.length ? agesMois[Math.floor(agesMois.length / 2)] : null,
+  }
+}
+
+// ── Onglets et aide ──────────────────────────────────────────
+// Filtres des indicateurs : « Par » (liste) relié aux boutons radio d'origine ; réglages et affichage en menus déroulants.
+$('#indParChoix').addEventListener('change', (e) => { const r = document.querySelector(`input[name=indPar][value=${e.target.value}]`); r.checked = true; r.dispatchEvent(new Event('change')) })
+const fermerPops = (sauf) => document.querySelectorAll('.ind-pop').forEach((p) => { if (p !== sauf) { p.hidden = true; p.previousElementSibling.setAttribute('aria-expanded', 'false') } })
+document.querySelectorAll('.ind-pop-btn').forEach((b) => b.addEventListener('click', (e) => {
+  e.stopPropagation(); const p = b.nextElementSibling; fermerPops(p); p.hidden = !p.hidden; b.setAttribute('aria-expanded', String(!p.hidden))
+  if (!p.hidden) p.querySelector('input, select')?.focus()
+}))
+document.addEventListener('click', (e) => { if (!e.target.closest('.ind-pop-zone')) fermerPops() })
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.querySelector('.ind-pop:not([hidden])')) { const b = document.querySelector('.ind-pop:not([hidden])').previousElementSibling; fermerPops(); b.focus() } })
+// Résumé lisible des réglages sur le bouton (« 20 lits · ≥ 70 % · estimée · p95 »)
+function resumerCalcul() {
+  const lits = $('#indLits').value, inc = { exclure: 'exclue', estimee: 'estimée', mediane: 'médiane' }[$('#indInconnues').value], cen = $('#indCensure').value === 'p95' ? 'p95' : '30 j'
+  $('#resumeCalcul').textContent = `${lits ? `${lits} lits` : 'lits ?'} · ≥ ${Math.round(100 * +$('#indSeuil').value)} % · ${inc} · ${cen}`
+  $('#indParChoix').value = document.querySelector('input[name=indPar]:checked').value
+}
+['#indLits', '#indSeuil', '#indInconnues', '#indCensure'].forEach((k) => $(k).addEventListener('input', resumerCalcul))
+// Barre latérale : réduite (icônes seules, mémorisé) ou ouverte par-dessus la page sur petit écran.
+const reduireSidebar = (oui) => { $('#shell').classList.toggle('collapsed', oui); $('#reduireSidebar').setAttribute('aria-expanded', String(!oui)); $('#reduireSidebar').title = oui ? 'Agrandir la barre latérale' : 'Réduire la barre latérale' }
+try { reduireSidebar(localStorage.getItem('saisie.sidebarReduite') === '1') } catch {}
+$('#reduireSidebar').onclick = () => { const oui = !$('#shell').classList.contains('collapsed'); reduireSidebar(oui); try { localStorage.setItem('saisie.sidebarReduite', oui ? '1' : '0') } catch {}; window.dispatchEvent(new Event('resize')) }
+$('#ouvrirSidebar').onclick = () => $('#shell').classList.add('open')
+const navIndicateurs = $('.nav-parent'), majChevron = () => navIndicateurs.setAttribute('aria-expanded', String(!$('#shell').classList.contains('ind-ferme')))
+navIndicateurs.addEventListener('click', (e) => {
+  if (e.target.tagName === 'INPUT') return
+  if (navIndicateurs.querySelector('input').checked) { e.preventDefault(); $('#shell').classList.toggle('ind-ferme') }
+  else $('#shell').classList.remove('ind-ferme')
+  majChevron()
+})
+majChevron()
+$('#scrim').onclick = () => $('#shell').classList.remove('open')
+document.querySelectorAll('input[name=onglet]').forEach((r) => r.addEventListener('change', () => {
+  const vue = r.value
+  $('#topbarInd').hidden = vue !== 'indicateurs'; $('#shell').classList.remove('open')
+  $('#vueSaisie').classList.toggle('visible', vue === 'saisie')
+  $('#vueControle').classList.toggle('visible', vue === 'controle')
+  $('#vueIndicateurs').classList.toggle('visible', vue === 'indicateurs')
+  if (vue === 'controle') afficherControle()
+  else if (vue === 'indicateurs') {
+    // Le dessin d'une rubrique peut prendre une à deux secondes : la vue et un message s'affichent d'abord.
+    $('#indZone').innerHTML = '<div class="ind-calcul"><span class="ind-roue"></span>Calcul des indicateurs…</div>'
+    setTimeout(() => (cacheIndicateurs && signatureSaisie() === signatureIndicateurs ? dessinerVue() : afficherIndicateurs()), 30)
+  }
+  else visionSaisie.ajuster()
+}))
+$('#lexique').innerHTML = Object.entries(window.ABREVIATIONS ?? {}).map(([a, s]) => `<b>${echapper(a)}</b><span>${echapper(s)}</span>`).join('')
+$('#ouvrirAide').onclick = () => $('#aide').classList.add('visible')
+$('#fermerAide').onclick = () => $('#aide').classList.remove('visible')
+$('#aide').addEventListener('click', (e) => { if (e.target.id === 'aide') $('#aide').classList.remove('visible') })
+
+// ── Démarrage ────────────────────────────────────────────────
+if (!Object.keys(REGISTRES).length) document.body.innerHTML = '<p style="padding:24px">Le fichier registres.js est introuvable : il doit être dans le même dossier que saisie.html.</p>'
+else { construireFormulaire(); majSuggestions(); majListePhotos(); sauver(); nouvelleLigne(); if (!etat.lignes.length) $('#aide').classList.add('visible') }
+</script>
+<script src="calendrier.js?v=1"></script>
+<script src="statistiques.js?v=12"></script>
+<script src="indicateurs.js?v=51"></script>
+<script src="occupation-validation.js?v=2"></script>
+</body>
+</html>
