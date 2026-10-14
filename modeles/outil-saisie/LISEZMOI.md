@@ -20,6 +20,8 @@ SARIMA…). Elles se mettent à jour à chaque ligne enregistrée.
 
 ---
 
+Pour lire **chaque graphe** (ce qu'il montre, ce qui doit alerter, exemples fictifs) : [`INTERPRETER-LES-GRAPHES.md`](INTERPRETER-LES-GRAPHES.md).
+
 ## Sommaire
 
 1. [Place dans le projet](#1-place-dans-le-projet)
