@@ -279,6 +279,24 @@ mois où au moins 90 % des durées sont connues. C'est pourquoi les statistiques
 ne comptent que les séjours **terminés pendant la période de calcul** : un encadré de la synthèse détaille
 où va chaque ligne.
 
+### Occupation : deux méthodes de comptage
+
+Bouton **Calcul** → **Comptage** :
+
+| Méthode | Un enfant compte le jour d si | Séjour de 3 nuits | Mise en observation |
+|---|---|---|---|
+| **Recensement de minuit** (défaut, norme hospitalière) | entrée ≤ d < sortie | 3 jours | 0 |
+| **Présence dans la journée** | entrée ≤ d ≤ sortie | 4 jours | 1 |
+
+Le comptage journalier ajoute environ une journée par séjour : le taux d'occupation augmente d'environ
+« admissions par jour ÷ lits ». Tous les calculs suivent la méthode choisie (journées, taux, loi de Little
+avec W + 1 jour, bilan des flux, Monte-Carlo, file M/G/∞).
+
+Limites : le recensement de minuit ignore les mises en observation et le jour de sortie (sous-estime
+l'occupation de jour) ; le comptage journalier compte deux fois un lit libéré le matin et réoccupé
+l'après-midi (peut surestimer le nombre de lits occupés en même temps). Sans heure d'entrée ni de sortie dans
+le registre, la vérité se situe entre les deux. Le mémoire doit dire laquelle est retenue et pourquoi.
+
 ### Occupation : recensement de minuit et fourchette
 
 Chaque soir, on compte les patients présents (entrés avant ou ce jour-là, pas encore sortis). Pour une

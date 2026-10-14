@@ -58,6 +58,21 @@ est testé dans le banc D4 (τ de 0,5 à 0,9 et coût moyen pour plusieurs rappo
 
 ---
 
+### 1.1 Deux façons de compter les présents
+
+| Méthode | Un enfant compte le jour d si | Séjour de 3 nuits | Mise en observation |
+|---|---|---|---|
+| Recensement de minuit (retenue) | entrée ≤ d < sortie | 3 jours | 0 |
+| Comptage journalier | entrée ≤ d ≤ sortie | 4 jours | 1 |
+
+Toute la chaîne (prétraitement, entraînement, bancs, validation finale) se lance avec l'une ou l'autre série
+(option `--comptage`), avec des réglages choisis séparément pour chacune. Les limites de chaque méthode sont
+détaillées dans `README.md`, section 5.2 bis. En bref : le recensement de minuit ignore les mises en
+observation et le jour de sortie ; le comptage journalier compte deux fois un lit libéré le matin et
+réoccupé l'après-midi. La vérité se situe entre les deux.
+
+---
+
 ## 2. Ce qu'on attend d'une bonne prévision : les mesures
 
 On note y la valeur réelle, ŷ la prévision, n le nombre de jours évalués.
@@ -370,6 +385,9 @@ le choix est fixé par la méthode du mémoire et n'est pas mis en compétition 
 | Début de la période | mois avec ≥ 90 % de durées connues, puis rodage | 80 %, 95 %, rodage au début | équilibre entre données gardées et biais de sous-comptage | P5 |
 | Fin de série | p95 du délai d'inscription retiré | aucune coupe, 7 jours | les derniers jours manquent d'enfants pas encore inscrits | P6 |
 | Trous de saisie | gardés | lignes d'apprentissage touchées exclues | à mesurer : un trou crée un faux creux que le modèle apprendrait | P7 |
+| Méthode de comptage | recensement de minuit | comptage journalier (jour de sortie compris) | norme hospitalière, comparable ; le comptage journalier est mené en parallèle (`--comptage journee`) car il voit les mises en observation | P8, et toute la chaîne avec chaque série |
+| Fautes d'année ou de mois sur l'entrée | corrigées (journal `corrections_dates_PED.csv`), à reporter dans l'outil | ligne gardée telle quelle | une entrée en 2023 fausse tout le début de la série | contrôle de cohérence du convertisseur |
+| Départ du rodage | premier jour d'enregistrement + max(14 j, p95 des durées) | début du premier mois des admissions | les enfants présents au 1er jour du registre ont été admis avant : on attend qu'ils soient sortis | P5 |
 
 ### 9.3 Variables d'entrée (`benchmark_choix.py`)
 

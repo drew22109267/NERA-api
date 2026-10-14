@@ -242,6 +242,43 @@ O(nombre de séjours + nombre de jours).
 L'occupation **n'est pas plafonnée** au nombre de lits : un dépassement est un sureffectif réel
 (lit d'appoint, deux enfants par lit) et c'est une information à garder.
 
+### 5.2 bis Deuxième méthode : le comptage journalier
+
+Option `--comptage journee` (Python) et réglage « Comptage » de l'outil. Un enfant compte chaque jour où il
+est présent, jour de sortie compris :
+
+```
+P'_d = Σ_i 1(e_i ≤ d ≤ S_i)
+```
+
+Calcul : le même tableau de différences, avec chaque fin de séjour décalée d'un jour (−w au jour S_i + 1).
+Un séjour de n nuits compte n + 1 jours ; une mise en observation (entrée et sortie le même jour) compte 1.
+Les admissions et les sorties ne changent pas ; seul le nombre de présents change.
+
+Conséquences exactes, utiles pour vérifier les calculs :
+
+- journées : JH' = JH + (nombre de séjours terminés dans la période), à l'effet de bord près ;
+- loi de Little : L' = λ·(W + 1), W en nuits (le contrôle `verifier_little` ajoute 1 à W en mode journée) ;
+- présents moyens et taux d'occupation : augmentés d'environ λ, le nombre d'admissions par jour.
+
+**Limites de chaque méthode.**
+
+| | Recensement de minuit | Comptage journalier |
+|---|---|---|
+| Ce qu'il mesure | lits occupés pendant la nuit | lits utilisés à un moment de la journée |
+| Référence | norme des statistiques hospitalières (journées d'hospitalisation = nuits) ; comparable aux autres hôpitaux | pas de norme commune : à définir dans le mémoire |
+| Mises en observation (0 nuit) | invisibles (comptent 0), alors qu'elles occupent un lit le jour | comptées (1 jour) |
+| Jour de sortie | ignoré : le lit libéré le matin est compté libre | compté occupé, même si l'enfant part à 8 h |
+| Rotation dans la journée | un lit libéré puis réoccupé le même jour compte 1 | compte 2 (sortant et entrant) : peut **surestimer** le besoin réel en lits simultanés |
+| Biais | sous-estime la charge de jour (consultations, soins, MEO) | surestime l'occupation simultanée ; plus sensible aux erreurs sur la date de sortie |
+| Pour la décision | lits nécessaires la nuit (garde) | charge de travail et lits utilisés dans la journée |
+
+Aucune des deux n'est « la vraie » occupation : sans heure d'entrée ni de sortie dans le registre, on ne
+peut mesurer que ces deux bornes de lecture. Le vrai nombre de lits occupés au même moment de la journée
+se situe entre les deux, en général plus près du recensement de minuit (pas de chevauchement des sorties du
+matin et des entrées de l'après-midi). Le banc de prétraitement (dimension P8) et l'option `--comptage` de
+tous les scripts permettent de mener toute l'étude avec l'une ou l'autre série et de comparer les conclusions.
+
 ### 5.3 Convention du nombre de jours : estimation de p avec rétrécissement
 
 Quand la sortie n'est pas écrite, « n jours » peut vouloir dire :
