@@ -1477,9 +1477,41 @@ $('#importer').addEventListener('change', async (e) => {
     completerLigne(l, v, extra)
     return l
   })
+  // Nouvelle transcription des mêmes lignes du registre : une ligne du fichier qui a le même mois, le même N° et
+  // une date d'enregistrement à moins de 7 jours d'une ligne déjà saisie est la même ligne du registre, transcrite
+  // autrement. Sur confirmation, l'ancienne est remplacée (sa photo est gardée). La condition de date évite de
+  // confondre deux numérotations d'un même mois (août 2026 : nouvelle série le 27).
+  const contenuLigne = (l) => colonnes().map((c) => String(l[c.k] ?? '').trim()).join('|')
+  const jourRef = (l) => { const d = lireDateSouple(l[registre().dateReference]); return d ? Math.round(d.d.getTime() / 86400000) : null }
+  const memeLigne = (a, b) => { const ja = jourRef(a), jb = jourRef(b); return ja === null || jb === null || Math.abs(ja - jb) <= 7 }
+  const parCle = {}
+  for (const l of lignesService()) { const n = numeroLigne(l), m = moisLigne(l); if (m && Number.isFinite(n)) (parCle[`${m}#${n}`] ??= []).push(l) }
+  // Une ligne déjà identique à une ligne du fichier n'est jamais remplacée : un même N° écrit deux fois dans le
+  // registre (deux lignes du fichier) ne doit pas s'écraser lui-même lors d'un nouvel import.
+  const dansFichier = new Set(nouvelles.map(contenuLigne))
+  for (const k in parCle) parCle[k] = parCle[k].filter((x) => !dansFichier.has(contenuLigne(x)))
+  const remplacements = []
+  for (const l of nouvelles) {
+    const n = numeroLigne(l), m = moisLigne(l); if (!m || !Number.isFinite(n)) continue
+    // Même ligne du registre mais contenu différent (l'identifiant, lui, est le même : date + N°).
+    const vieille = (parCle[`${m}#${n}`] ?? []).find((x) => memeLigne(x, l) && contenuLigne(x) !== contenuLigne(l))
+    if (vieille && !remplacements.some((r) => r.vieille === vieille)) remplacements.push({ vieille, l })
+  }
+  let remplacees = 0
+  if (remplacements.length) {
+    const ex = remplacements.slice(0, 3).map(({ l }) => `${libelleMois(moisLigne(l))} N° ${numeroLigne(l)}`).join(', ')
+    if (confirm(`${remplacements.length} ligne(s) du fichier ont le même mois et le même N° qu'une ligne déjà saisie (${ex}…) : c'est une autre transcription des mêmes lignes du registre.\n\nOK : remplacer les anciennes lignes par celles du fichier.\nAnnuler : garder les anciennes ; seules les lignes vraiment nouvelles seront ajoutées.`)) {
+      const retirer = new Set(remplacements.map((r) => r.vieille))
+      for (const { vieille, l } of remplacements) if (!l.photo && vieille.photo) l.photo = vieille.photo
+      etat.lignes = etat.lignes.filter((x) => !retirer.has(x)); remplacees = retirer.size
+    } else {
+      const ignorer = new Set(remplacements.map((r) => r.l))
+      for (let i = nouvelles.length - 1; i >= 0; i--) if (ignorer.has(nouvelles[i])) nouvelles.splice(i, 1)
+    }
+  }
   // Import incrémental : seules les lignes jamais vues sont ajoutées. Une ligne est « déjà là » si elle a le même
   // identifiant (service + mois + N° d'ordre) ou, à défaut d'identifiant, exactement le même contenu.
-  const avant = lignesService().length, deja = new Set(lignesService().map(cleLigne))
+  const avant = lignesService().length + remplacees, deja = new Set(lignesService().map(cleLigne))
   const ajoutees = []
   for (const l of nouvelles) {
     if (!colonnes().some((c) => String(l[c.k] ?? '').trim())) continue        // ligne vide
@@ -1490,7 +1522,7 @@ $('#importer').addEventListener('change', async (e) => {
   trierLignes()
   sauver(); majSuggestions(); majListePhotos(); nouvelleLigne()
   message(ajoutees.length
-    ? `${ajoutees.length} nouvelle(s) ligne(s) ajoutée(s) en ${registre().nom} · ${nouvelles.length - ajoutees.length} déjà présente(s), ignorée(s). Total : ${avant + ajoutees.length}.`
+    ? `${ajoutees.length - remplacees} nouvelle(s) ligne(s) ajoutée(s) en ${registre().nom}${remplacees ? ` · ${remplacees} ancienne(s) transcription(s) remplacée(s)` : ''} · ${nouvelles.length - ajoutees.length} déjà présente(s), ignorée(s). Total : ${lignesService().length}.`
     : `Rien de nouveau : les ${nouvelles.length} ligne(s) du fichier sont déjà dans ${registre().nom}.`)
 })
 // Colonnes du CSV → colonnes du registre. Un fichier transcrit ailleurs peut nommer autrement les mêmes
