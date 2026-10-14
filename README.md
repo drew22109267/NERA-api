@@ -410,5 +410,8 @@ bibliothèque d'apprentissage automatique) :
 4. test final sur septembre-octobre 2026, avec réentraînement mensuel ;
 5. modèle de survie J0/J1/J2 et transfert vers les services à historique court.
 
+Chaque modèle, sa fonction de coût, la fonction minimisée, la technique de minimisation et la justification
+de chaque décision (avec le banc de comparaison qui la teste) : [`modeles/METHODE.md`](modeles/METHODE.md).
+
 Installation, ordre des scripts, toutes les formules mathématiques, lecture des figures et tests :
 [`modeles/README.md`](modeles/README.md).

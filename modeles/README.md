@@ -21,6 +21,10 @@ scikit-learn, statsmodels ou bibliothèque statistique.** pandas sert à lire le
 manipuler les dates, matplotlib à dessiner. L'outil de saisie est en JavaScript sans aucune
 dépendance externe.
 
+**Pour comprendre les choix** : [`METHODE.md`](METHODE.md) explique, en français et pas à pas, pour chaque
+modèle la fonction de coût, la fonction minimisée et la technique de minimisation, puis donne le registre de
+toutes les décisions (retenu, alternatives, raison, banc qui la vérifie).
+
 Les nombres cités en exemple dans les parties mathématiques sont **fictifs** : ils illustrent la
 lecture des formules et ne sont pas des résultats du mémoire.
 
@@ -766,8 +770,17 @@ en courbe : lien non linéaire (argument pour un noyau RBF).
 
 ## 9. Mathématiques E : modèles de prévision de référence
 
-Code : `svr/references.py`, `svr/classiques.py` (Python) et `outil-saisie/statistiques.js`
-(rubrique « Modèles de prévision » de l'outil).
+Code : `svr/references.py`, `svr/classiques.py`, `svr/series_classiques.py` (Python) et
+`outil-saisie/statistiques.js` (rubrique « Modèles de prévision » de l'outil). `series_classiques.py`
+reprend en Python, à l'identique, tous les modèles de l'outil pour le banc de comparaison.
+
+**Protocole équitable avec les SVR.** Dans le banc, chaque modèle de référence est **réestimé à chaque
+origine** de la validation glissante, sur les seuls jours connus ce soir-là (comme le SVR est réentraîné),
+puis son état (niveau, tendance, saisons, innovations) avance jour par jour sans jamais lire le futur. Pour
+être jugé sur la même perte pinball que le SVR, il reçoit des quantiles tirés de ses propres erreurs à h jours
+sur l'apprentissage : q̂_τ = ŷ + Q_τ(e), e_s = y_{s+h} − ŷ_{s+h|s}, s + h ≤ O. L'ordre du SARIMA est choisi
+une seule fois sur les jours d'avant la validation (meilleur BIC à (d, D) fixés, puis départage par l'erreur
+sur les 20 % finaux de l'apprentissage).
 
 ### 9.1 Modèles
 
@@ -1038,7 +1051,7 @@ Diebold-Mariano (meilleure, équivalente ou moins bonne).
 
 | Dimension | Question | Variantes |
 |---|---|---|
-| D1 | Le SVR bat-il les méthodes classiques ? | persistance, saisonnier, moyenne mobile, Holt-Winters, ridge, SVR niveaux 1 à 4 |
+| D1 | Le SVR bat-il les références et les autres modèles d'apprentissage ? | persistance, saisonnier naïf, moyennes historique et mobile, lissage simple, Thêta, Holt linéaire et amorti, lissage saisonnier, Holt-Winters additif et multiplicatif, AR(p), SARIMA, ridge, forêt aléatoire, gradient boosting, perceptron multicouche, LSTM, SVR niveaux 1 à 4 |
 | D2 | Quel noyau ? | linéaire, RBF, composite |
 | D3 | Quelle perte ? | carrée (ridge), ε-insensible avec ε = 0 / 0,5 / 1 / 2 |
 | D4 | Quel τ selon le coût d'une pénurie ? | τ de 0,5 à 0,9 ; coût moyen pour des rapports pénurie / lit vide de 1, 2, 4, 9 |
@@ -1184,7 +1197,8 @@ Ces briques produisent toutes les p-valeurs ; elles sont écrites à la main
 | `caracteristiques.py` | tableau d'apprentissage, standardisation, options de variables (fériés, vacances, nombre de retards) |
 | `validation.py` | validation glissante, découpage final |
 | `references.py` | niveau 0 et intervalle naïf |
-| `classiques.py` | Holt-Winters additif amorti, régression ridge |
+| `classiques.py` | Holt-Winters additif amorti (réglé par grille), régression ridge |
+| `series_classiques.py` | références sur la série seule : Nelder-Mead, lissages exponentiels, Thêta, Holt-Winters, AR(p), SARIMA (CSS, choix d'ordre) ; évaluation réestimée à chaque origine avec quantiles empiriques |
 | `metriques.py` | métriques et Diebold-Mariano avec correction HLN |
 | `recherche.py` | grille et essaim particulaire |
 | `analyse.py` | Pearson, Spearman, ACF, PACF, profils, calibration, courbe d'apprentissage, importance par permutation, coût des décisions, kappa de Cohen |
@@ -1192,7 +1206,7 @@ Ces briques produisent toutes les p-valeurs ; elles sont écrites à la main
 | `survie.py` | tableau patient-jour, hasard, J0/J1/J2, table de survie, loi gamma |
 | `calendrier.py` | jours fériés (Pâques calculée), fêtes musulmanes et vacances lues dans `donnees/` |
 | `reproductibilite.py` | fiche d'environnement (versions, commande, commit, paramètres) |
-| `concurrents.py` | modèles d'apprentissage concurrents (forêt aléatoire, boosting, perceptron, LSTM) : écrit, ni branché ni testé, réservé à une étape ultérieure |
+| `concurrents.py` | concurrents du SVR, écrits à la main : arbre CART, forêt aléatoire quantile (Meinshausen), gradient boosting quantile, perceptron multicouche et LSTM quantiles (rétropropagation à la main) ; même tableau de variables et même validation que le SVR ; dans la dimension D1 |
 
 ### `outil-saisie/` : saisie et analyse des registres
 
@@ -1257,6 +1271,31 @@ Validation glissante sur les 6 mois avant le verrou, une origine tous les 14 jou
 
 Options : `--dimensions D1 D5`, `--pas` (28 par défaut), `--rapide`. Écrit
 `benchmark_PED_<D>_h<h>.csv` et `benchmark_PED.md` (tableaux et conclusions prêts pour le mémoire).
+
+### Étape 3 ter : `benchmark_pretraitement.py`, chaque choix de prétraitement
+
+```bash
+~/memoire-env/bin/python benchmark_pretraitement.py donnees/<export>.csv --service PED --lits 20 --horizons 1 7
+```
+
+Sept dimensions, une décision changée à la fois : durées inconnues (P1), fenêtre de censure (P2),
+convention des jours (P3), patients reportés (P4), période exploitable (P5), fin de série (P6), trous de
+saisie (P7). Comme la série cible change avec le prétraitement, chaque variante est jugée deux fois : contre
+sa propre série (reste-t-elle prévisible ?) et contre la série retenue sur les mêmes jours (change-t-elle les
+prévisions ? test de Diebold-Mariano). Écrit `pretraitement_PED_<P>_h<h>.csv` et `pretraitement_PED.md`.
+
+### Étape 3 quater : `benchmark_parametres.py`, sensibilité de tous les paramètres
+
+```bash
+~/memoire-env/bin/python benchmark_parametres.py --service PED --horizons 1 7
+```
+
+Un paramètre varie à la fois autour de sa valeur retenue, tout le reste fixé, sur les mêmes jours :
+SVR niveau 4 (C, ε, γ₁, γ₂, τ, η₀, itérations, décroissance, Polyak, tolérance, préconditionnement,
+optimiseur), SVR niveau 2 (C, ε, γ), forêt, boosting, perceptron, LSTM, nombre de jours de retard.
+Pour chaque paramètre : tableau, Diebold-Mariano contre la valeur retenue, figure de l'erreur selon la valeur,
+et amplitude (MAE max − MAE min) / MAE retenue. Option `--familles svr4 foret …`. Écrit
+`parametres_PED_<famille>_<paramètre>_h<h>.csv` / `.png`, `parametres_PED_synthese.csv` et `parametres_PED.md`.
 
 ### Étape 4 : `visualisations.py`, toutes les figures
 
@@ -1353,6 +1392,8 @@ de triage (classification).
 | `test_verrou.py` | rien après le verrou n'est lu ; ouverture journalisée ; période exploitable |
 | `test_analyse.py` | Pearson, rangs avec ex æquo, Spearman, ACF, PACF, calibration, profils |
 | `test_survie_transfert.py` | Polyak après arrêt anticipé, gradient du SVM classifieur, Platt, AUC et Brier, gamma incomplète, tableau patient-jour, table de survie, J0/J1/J2, conversion des hyperparamètres en taux |
+| `test_series_classiques.py` | Nelder-Mead, lissage sur série constante, Holt sur une droite exacte, Holt-Winters sur une semaine exacte, AR(1) retrouvé, SARIMA AR(1) retrouvé, quantiles ordonnés, **aucune fuite du futur** pour tous les modèles de référence |
+| `test_concurrents.py` | gradients du perceptron et du LSTM par différences finies, arbre sur une marche, forêt (quantiles ordonnés, couverture), boosting (baisse de la perte), interface commune des quatre concurrents |
 | `test_ajouts.py` | Pâques et fériés, Holt-Winters, ridge, options des variables, reports, capacité variable, kappa, coût des décisions, importance par permutation |
 | `test_calendrier.py` | concordance des jours fériés et des vacances entre Python, JavaScript et les fichiers de données |
 

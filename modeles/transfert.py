@@ -164,7 +164,7 @@ def main() -> None:
     rapport = [f"# Transfert de la méthode — source {a.source} vers {', '.join(a.cibles)}\n",
                ("**Test final sur le coffre** (septembre–octobre 2026)." if final else
                 "Validation glissante sur la fenêtre de chaque service cible (données verrouillées).")
-               + f" Niveau transféré : {a.niveau}. ★ = stratégie A (locale), référence du test de Diebold-Mariano.\n"]
+               + f" Niveau transféré : {a.niveau}. « (retenu) » = stratégie A (locale), référence du test de Diebold-Mariano.\n"]
 
     for h in a.horizons:
         print(f"\n══════ Horizon J+{h}")

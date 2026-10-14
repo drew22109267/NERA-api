@@ -23,6 +23,7 @@ Dimensions comparées
                                          de Polyak, sans préconditionnement, sans décroissance de η
   D9  Combinaison                        meilleur modèle seul, moyenne simple, empilement appris
   D10 Recherche d'hyperparamètres        défaut, grille, essaim particulaire  (option --recherche)
+  D11 Chaque variable une à une          toutes les variables, puis la même sans chacune d'elles
 
 Protocole commun
 ----------------
@@ -64,7 +65,9 @@ from svr import metriques as M
 from svr import references as R
 from svr.calendrier import feries, vacances
 from svr.caracteristiques import Standardiseur, construire
+from svr import series_classiques as SC
 from svr.classiques import RegressionRidge, choisir_holt_winters, holt_winters
+from svr.concurrents import CONCURRENTS, HyperConcurrents, fabrique_concurrent
 from svr.modeles import Entrainement, IntervalleQuantile, Perte, SVRLineaire, SVRNoyau, SVRNoyauComposite
 from svr.niveaux import Hyperparametres, fabrique
 from svr.noyaux import NoyauComposite, NoyauRBF
@@ -95,7 +98,7 @@ class Dimension:
             raise RuntimeError(f"{self.code} · {nom} : jours évalués différents des autres variantes.")
         p = point(prevision)                                           # médiane ou prévision ponctuelle
         q = prevision[self.tau] if isinstance(prevision, dict) and self.tau in prevision else p
-        ligne = {"variante": nom + (" ★" if retenu else ""), "MAE": round(M.mae(y, p), 3),
+        ligne = {"variante": nom + (" (retenu)" if retenu else ""), "MAE": round(M.mae(y, p), 3),
                  "RMSE": round(M.rmse(y, p), 3), "biais": round(M.biais(y, p), 3),
                  f"pinball τ={self.tau}": round(M.pinball_moyenne(y, q, self.tau), 4)}
         if isinstance(prevision, dict) and 0.05 in prevision and 0.95 in prevision:
@@ -135,6 +138,24 @@ class Dimension:
         return phrase
 
 
+class SansColonne:
+    """Le même modèle, à qui l'on cache la colonne j de X : mesure ce que cette variable apporte (ablation)."""
+
+    def __init__(self, fabrique_modele, j: int):
+        self.modele, self.j = fabrique_modele(), j
+
+    def _x(self, X):
+        X = torch.as_tensor(X)
+        return torch.cat([X[:, :self.j], X[:, self.j + 1:]], dim=1)
+
+    def entrainer(self, X, y):
+        self.modele.entrainer(self._x(X), y)
+        return self
+
+    def predire(self, X):
+        return self.modele.predire(self._x(X))
+
+
 def chrono(fonction):
     """Exécute `fonction()` et renvoie (résultat, secondes écoulées)."""
     debut = time.perf_counter()
@@ -162,8 +183,8 @@ def main() -> None:
     p.add_argument("--tau", type=float, default=0.8)
     p.add_argument("--pas", type=int, default=28, help="jours entre deux origines de la validation glissante (28)")
     p.add_argument("--debut-validation", help="première origine (défaut : 6 mois avant le verrou)")
-    p.add_argument("--dimensions", nargs="+", default=[f"D{i}" for i in range(1, 10)],
-                   help="dimensions à lancer (D1 … D9 par défaut ; D10 avec --recherche)")
+    p.add_argument("--dimensions", nargs="+", default=[f"D{i}" for i in (*range(1, 10), 11)],
+                   help="dimensions à lancer (D1 … D9 et D11 par défaut ; D10 avec --recherche)")
     p.add_argument("--recherche", action="store_true", help="ajoute D10 (grille et essaim : long)")
     p.add_argument("--rapide", action="store_true", help="800 itérations au lieu de celles des hyperparamètres")
     a = p.parse_args()
@@ -179,7 +200,7 @@ def main() -> None:
     fin_entr = int((occ.index < debut_val).sum())             # indice du premier jour de validation dans la série
     rapport = [f"# Banc de comparaison des choix — service {a.service}\n",
                f"Validation glissante du {debut_val:%d/%m/%Y} au verrou ({DATE_VERROU:%d/%m/%Y}), une origine tous les "
-               f"{a.pas} jours, modèle réentraîné à chaque origine. ★ = choix retenu. Test de Diebold-Mariano "
+               f"{a.pas} jours, modèle réentraîné à chaque origine. « (retenu) » = choix retenu. Test de Diebold-Mariano "
                "(perte absolue, correction HLN) contre le choix retenu.\n"]
 
     for h in a.horizons:
@@ -208,15 +229,32 @@ def main() -> None:
 
         # ── D1 · Modèles classiques contre SVR ──────────────────────────────
         if "D1" in dims:
-            d = Dimension("D1", "Modèles classiques contre SVR", "Le SVR fait-il mieux que les méthodes statistiques usuelles ?", h, a.tau)
+            d = Dimension("D1", "Modèles de référence, concurrents et SVR",
+                          "Le SVR fait-il mieux que les méthodes statistiques usuelles et que les autres modèles d'apprentissage ?", h, a.tau)
             for nom, f in [("Persistance", lambda: R.persistance(tab.serie, orig, h)),
                            ("Saisonnière hebdomadaire", lambda: R.saisonniere(tab.serie, orig, h)),
                            ("Moyenne mobile 7 j", lambda: R.moyenne_mobile(tab.serie, orig, h))]:
                 prev, s = chrono(f); d.ajouter(nom, y, prev, s)
+            # Références sur la série seule (lissages, Thêta, AR, SARIMA) : paramètres réestimés à chaque origine,
+            # quantiles tirés de leurs erreurs d'apprentissage (svr/series_classiques.py). Ordre SARIMA choisi une
+            # fois, sur les jours d'avant la validation seulement.
+            blocs = [tab.origines[dec.evaluation].tolist() for dec in decs]
+            (ordre, essais), s_ordre = chrono(lambda: SC.choisir_ordre_sarima([float(v) for v in tab.serie[:fin_entr]]))
+            pd.DataFrame(essais).to_csv(resultats / f"benchmark_{a.service}_sarima_ordres_h{h}.csv", sep=";", encoding="utf-8-sig", index=False)
+            for nom, fab in SC.modeles_de_reference(ordre).items():
+                prev, s = chrono(lambda: SC.evaluer_serie(fab, tab.serie, blocs, h, taus=(0.05, a.tau, 0.95)))
+                d.ajouter(nom, y, prev, s + (s_ordre if "SARIMA" in nom else 0.0))
             (params, prev), s = chrono(lambda: (lambda pr: (pr, holt_winters(tab.serie, orig, h, **pr)))(
                 choisir_holt_winters(tab.serie, h, fin_entr)))
-            d.ajouter("Holt-Winters additif amorti", y, prev, s, **{"réglages": ", ".join(f"{k}={v}" for k, v in params.items())})
+            d.ajouter("Holt-Winters additif, grille fixée avant la validation", y, prev, s,
+                      **{"réglages": ", ".join(f"{k}={v}" for k, v in params.items())})
             prev, s = prevoir(lambda: RegressionRidge(1.0)); d.ajouter("Régression ridge (λ = 1)", y, prev, s)
+            # Concurrents d'apprentissage : même tableau de variables, même standardisation, même validation.
+            hpc = HyperConcurrents(tau=a.tau)
+            if a.rapide:
+                hpc = dataclasses.replace(hpc, arbres=60, etapes=80, epoques=300, graines=1)
+            for cle, nom in CONCURRENTS.items():
+                prev, s = prevoir(fabrique_concurrent(cle, hpc, retards=7)); d.ajouter(nom, y, prev, s)
             for niveau, nom in [(1, "SVR linéaire (niveau 1)"), (2, "SVR RBF (niveau 2)"),
                                 (3, "SVR quantile RBF (niveau 3)"), (4, "SVR quantile composite (niveau 4)")]:
                 prev, s = prevoir(fabrique(niveau, hp[niveau], tab.blocs))
@@ -357,6 +395,17 @@ def main() -> None:
                 prev, s = prevoir(fabrique(2, hp_m, tab.blocs))
                 d.ajouter("Grille" if methode == "grille" else "Essaim particulaire", y, prev, s + s_r,
                           retenu=(methode == "grille"), **{"C": round(hp_m.C, 3), "γ": round(hp_m.gamma, 4)})
+            publier(d)
+
+        # ── D11 · Chaque variable une à une (ablation) ──────────────────────
+        if "D11" in dims:
+            d = Dimension("D11", "Chaque variable, une à une",
+                          "Que perd le modèle si on lui retire cette seule variable ? (modèle RBF du niveau 2, mêmes jours)", h, a.tau)
+            prev, s = prevoir(fabrique(2, hp[2], tab.blocs))
+            d.ajouter("Toutes les variables", y, prev, s, retenu=True)
+            for j, nom in enumerate(tab.noms):
+                prev, s = prevoir(lambda j=j: SansColonne(fabrique(2, hp[2], tab.blocs), j))
+                d.ajouter(f"Sans {nom}", y, prev, s)
             publier(d)
 
     (resultats / f"benchmark_{a.service}.md").write_text("\n".join(rapport), encoding="utf-8")

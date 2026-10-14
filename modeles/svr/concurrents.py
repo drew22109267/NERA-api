@@ -149,7 +149,7 @@ class Arbre:
         ligne, colonne = divmod(i, len(cols))
         if not math.isfinite(float(sce[ligne, colonne])):
             return -1, 0.0, 0.0
-        gain = float(Qt - St ** 2 / n - sce[ligne, colonne])
+        gain = float(Qt[colonne] - St[colonne] ** 2 / n - sce[ligne, colonne])   # totaux identiques d'une colonne à l'autre
         return int(cols[colonne]), float((xs[ligne, colonne] + xs[ligne + 1, colonne]) / 2), gain
 
     def construire(self, X: torch.Tensor, r: torch.Tensor, valeur_feuille=None) -> "Arbre":

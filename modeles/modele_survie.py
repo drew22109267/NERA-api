@@ -141,7 +141,7 @@ def main() -> None:
         "Table de survie (ancienneté seule)": par_anciennete(h_table),
         f"Loi gamma de la durée (a = {forme:.2f}, θ = {echelle:.2f})": par_anciennete(h_gamma),
         "SVM linéaire, coûts symétriques + Platt": HasardSVM(enc, std, a.C, a.C, e).entrainer(entr, y_entr, cal, y_cal),
-        f"SVM linéaire, coûts asymétriques C+/C− = {ratio:.1f} + Platt ★": HasardSVM(enc, std, a.C * ratio, a.C, e).entrainer(entr, y_entr, cal, y_cal),
+        f"SVM linéaire, coûts asymétriques C+/C− = {ratio:.1f} + Platt (retenu)": HasardSVM(enc, std, a.C * ratio, a.C, e).entrainer(entr, y_entr, cal, y_cal),
     }
     retenu = list(modeles)[-1]
 
@@ -192,7 +192,7 @@ def main() -> None:
     meilleur = tableau["Brier"].idxmin()
     texte = [f"# Modèle de survie J0/J1/J2 — {a.service}\n",
              f"{'Test final sur le coffre' if final else 'Validation'} : {len(val)} jours-patients, {len(jours_val)} matins. "
-             "★ = modèle retenu. Brier et log-loss : plus petit = meilleur ; AUC : plus grand = meilleur ; "
+             "« (retenu) » = modèle retenu. Brier et log-loss : plus petit = meilleur ; AUC : plus grand = meilleur ; "
              "MAE J0/J1/J2 : écart moyen entre sorties attendues et réelles par jour.\n", en_markdown(tableau), "\n",
              f"Meilleur score de Brier : **{meilleur}**." + ("" if meilleur == retenu else " ⚠ Le modèle retenu n'est pas le meilleur : à revoir.") + "\n"]
 
@@ -221,7 +221,7 @@ def main() -> None:
             if dans.any():
                 w = torch.tensor(w_val, dtype=TYPE)[dans]
                 xs.append(float((h[dans] * w).sum() / w.sum())); ys.append(float((torch.tensor(y_val, dtype=TYPE)[dans] * w).sum() / w.sum()))
-        ax.plot(xs, ys, "o-", label=nom.replace(" ★", ""))
+        ax.plot(xs, ys, "o-", label=nom.replace(" (retenu)", ""))
     ax.set_xlabel("Probabilité de sortie prévue (moyenne du décile)"); ax.set_ylabel("Fréquence réelle des sorties")
     ax.set_title("Calibration du hasard journalier"); ax.legend(fontsize=7)
     fig.tight_layout(); fig.savefig(sortie / f"survie_{a.service}_calibration.png", dpi=150); plt.close(fig)
