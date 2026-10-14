@@ -1671,12 +1671,29 @@ function lignesPage(p) {
 const numerosAbsents = (p) => { const pris = new Set(lignesPage(p).map((x) => x.n)), r = []; for (let n = p.de; n <= p.a && r.length < 60; n++) if (!pris.has(n)) r.push(n); return r }
 
 // Proposition de mois et de N° pour une page : d'après les lignes déjà rattachées à cette photo, sinon rien.
-function proposerPage(p) {
-  const liees = lignesService().filter((l) => l.photo === p.photo)
-  if (!liees.length) return
-  const mois = moisLigne(liees[0]), n = liees.map(numeroLigne).filter(Number.isFinite)
-  if (mois && n.length) Object.assign(p, { mois, de: Math.min(...n), a: Math.max(...n) })
+// Repères des photos : { photo: { mois, de, a } }, gardés d'un contrôle à l'autre (une photo identifiée une
+// fois n'est plus à identifier). Les photos sont nommées dans l'ordre de prise de vue (date_heure), donc
+// l'ordre alphabétique suit l'ordre des pages du registre.
+const reperesPhotos = () => ((etat.reperesPhotos ??= {})[etat.service] ??= {})
+const maxParPage = () => registre().maxLignesParPhoto ?? 15
+const finDePage = (mois, de) => {      // dernier N° probable d'une page : de + 14, sans dépasser le dernier N° saisi du mois
+  const n = lignesService().filter((l) => moisLigne(l) === mois).map(numeroLigne).filter(Number.isFinite)
+  return Math.max(de, Math.min(de + maxParPage() - 1, n.length ? Math.max(...n) : de + maxParPage() - 1))
 }
+function proposerPage(p) {
+  p.propose = ''
+  const r = reperesPhotos()[p.photo]
+  if (r) { Object.assign(p, { mois: r.mois, de: r.de, a: r.a }); return }
+  const liees = lignesService().filter((l) => l.photo === p.photo)
+  const n = liees.map(numeroLigne).filter(Number.isFinite)
+  if (liees.length && moisLigne(liees[0]) && n.length) { Object.assign(p, { mois: moisLigne(liees[0]), de: Math.min(...n), a: Math.max(...n) }); return }
+  // Photo voisine déjà identifiée : la page suivante commence au N° qui suit, la précédente finit juste avant.
+  const noms = [...new Set([...photos.map((x) => x.nom), ...Object.keys(reperesPhotos())])].sort(), i = noms.indexOf(p.photo)
+  const avant = reperesPhotos()[noms[i - 1]], apres = reperesPhotos()[noms[i + 1]]
+  if (avant) { const de = avant.a + 1; Object.assign(p, { mois: avant.mois, de, a: finDePage(avant.mois, de), propose: noms[i - 1] }) }
+  else if (apres && apres.de > 1) { const a = apres.de - 1; Object.assign(p, { mois: apres.mois, de: Math.max(1, a - maxParPage() + 1), a, propose: noms[i + 1] }) }
+}
+const noterRepere = (p) => { if (p.mois && Number.isFinite(p.de) && Number.isFinite(p.a)) reperesPhotos()[p.photo] = { mois: p.mois, de: p.de, a: p.a } }
 
 function tirerPages(nb, choisie = null) {
   const noms = choisie ? [choisie] : photos.map((x) => x.nom)
@@ -1744,6 +1761,7 @@ function afficherControle() {
   if (c.vue === 'resultats') { largeurControle(true); visionControle.afficher(null); p.innerHTML = htmlResultatsControle(c); brancherResultatsControle(c); return }
   largeurControle(true)
   const page = c.pages[c.position]
+  if (page.etat === 'a-faire' && (!page.mois || page.propose)) proposerPage(page)
   visionControle.afficher(page.photo)
   p.innerHTML = htmlPageControle(c, page)
   brancherPageControle(c, page)
@@ -1759,7 +1777,7 @@ function htmlAccueilControle(nbLignes) {
     <ol class="etapes" style="margin:var(--space-4) 0">
       <li><span><b>Ouvrez les photos</b> du registre (menu « Ouvrir les photos », fichiers JPEG).</span></li>
       <li><span><b>Tirez des pages au hasard</b> : 20 pages (environ 300 lignes) donnent déjà une mesure précise.</span></li>
-      <li><span>Pour chaque page : tapez le <b>mois</b> et le <b>premier et le dernier N°</b> visibles sur la photo. Les lignes saisies s’affichent à côté.</span></li>
+      <li><span>Pour chaque page : choisissez le <b>mois</b> et tapez le <b>premier N°</b> écrit sur la photo. L’outil retrouve les lignes saisies (le dernier N° se remplit seul). Inutile que la photo ait été rattachée à ses lignes lors de la saisie : c’est ce que vous lisez sur la photo qui les retrouve.</span></li>
       <li><span>Comparez avec la photo et <b>cliquez chaque case mal recopiée</b> (elle devient rouge). Comptez les lignes <b>oubliées</b> ou <b>en trop</b>.</span></li>
       <li><span>Ouvrez les <b>résultats</b> : taux d’erreur global, par colonne, sur les colonnes de l’occupation, liste des erreurs à corriger et phrase prête pour le mémoire.</span></li>
     </ol>
@@ -1797,11 +1815,12 @@ function htmlPageControle(c, page) {
     </div>
     <div class="cq-pages">${c.pages.map(etiquette).join('')}</div>
     ${ouverte ? '' : '<div class="alert warn" style="margin:8px 0">Cette photo n’est pas ouverte : utilisez « Ouvrir les photos » (même dossier).</div>'}
-    <div class="cq-etape"><b>1.</b> Lisez sur la photo le mois et les N° d’ordre de la page :
+    <div class="cq-etape"><b>1.</b> Lisez sur la photo le mois et le <b>premier N°</b> de la page (le dernier se remplit seul, à corriger si besoin) :
       <select id="cqMois" class="input" style="width:auto"><option value="">mois…</option>${moisDispo.map((m) => `<option value="${m}" ${m === page.mois ? 'selected' : ''}>${libelleMois(m)}</option>`).join('')}</select>
       N° <input id="cqDe" class="input" type="number" min="0" value="${Number.isFinite(page.de) ? page.de : ''}" style="width:70px">
       à <input id="cqA" class="input" type="number" min="0" value="${Number.isFinite(page.a) ? page.a : ''}" style="width:70px">
     </div>
+    ${page.propose ? `<div class="alert info" style="margin:4px 0 8px;font-size:12.5px">Mois et N° <b>proposés</b> d’après la photo voisine ${echapper(page.propose)} : vérifiez-les sur la photo avant de contrôler.</div>` : ''}
     ${!page.mois || !Number.isFinite(page.de) || !Number.isFinite(page.a) ? '<p class="text-muted" style="font-size:13px">Les lignes saisies de cette page s’afficheront ici.</p>' : `
     <div class="cq-etape"><b>2.</b> Cliquez chaque case <b>différente de la photo</b> (rouge = erreur). ${L.length} ligne(s) saisie(s) pour ${libelleMois(page.mois)}, N° ${page.de} à ${page.a}.</div>
     <div class="cq-table-wrap"><table class="cq-table"><thead><tr><th class="num">N°</th>${cols.map((col) => `<th title="${echapper(col.l)}">${echapper(col.l)}</th>`).join('')}<th>Erreurs</th></tr></thead><tbody>
@@ -1823,9 +1842,11 @@ function htmlPageControle(c, page) {
     </div>`
 }
 function brancherPageControle(c, page) {
-  const lire = () => { page.mois = $('#cqMois').value; page.de = parseInt($('#cqDe').value, 10); page.a = parseInt($('#cqA').value, 10)
+  // Saisir le premier N° suffit : le dernier est proposé (premier + 14, borné au dernier N° saisi du mois).
+  const lire = (e) => { page.mois = $('#cqMois').value; page.de = parseInt($('#cqDe').value, 10); page.a = parseInt($('#cqA').value, 10); page.propose = ''
+    if (page.mois && Number.isFinite(page.de) && (e?.target.id !== 'cqA' || !Number.isFinite(page.a))) page.a = finDePage(page.mois, page.de)
     if (Number.isFinite(page.de) && Number.isFinite(page.a) && page.a < page.de) [page.de, page.a] = [page.a, page.de]
-    sauver(); afficherControle() }
+    noterRepere(page); sauver(); afficherControle() }
   ;['#cqMois', '#cqDe', '#cqA'].forEach((s) => $(s)?.addEventListener('change', lire))
   $('#panneauControle').querySelectorAll('.cq-case').forEach((td) => td.addEventListener('click', () => {
     const l = page.faux[td.dataset.cle] ?? [], k = td.dataset.k
@@ -1840,7 +1861,7 @@ function brancherPageControle(c, page) {
   $('#cqPrec').onclick = () => { c.position--; sauver(); afficherControle() }
   const suivante = () => { const i = c.pages.findIndex((p, j) => j > c.position && p.etat === 'a-faire'); c.position = i >= 0 ? i : Math.min(c.position + 1, c.pages.length - 1) }
   $('#cqValider').onclick = () => {
-    page.etat = 'faite'
+    page.etat = 'faite'; page.propose = ''; noterRepere(page)
     // La page est maintenant identifiée : les lignes sans photo y sont rattachées (utile dans l'onglet Saisie).
     for (const x of lignesPage(page)) if (!x.l.photo) x.l.photo = page.photo
     if (c.pages.every((p) => p.etat !== 'a-faire')) c.vue = 'resultats'; else suivante()

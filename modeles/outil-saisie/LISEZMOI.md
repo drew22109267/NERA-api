@@ -171,10 +171,16 @@ elles viennent : c'est la photo qu'on tire au hasard, et c'est elle qui retrouve
 1. **Ouvrir les photos** du registre (JPEG ; convertir les HEIC avec `convertir_photos.bat`).
 2. Choisir le nombre de pages (20 par défaut, environ 300 lignes) et **Tirer au hasard**. On peut aussi
    ajouter une page précise.
-3. Pour chaque page, la photo s'affiche à gauche. Taper le **mois** et le **premier et le dernier N° d'ordre**
-   visibles sur la photo (la numérotation repart à 1 chaque mois). Les lignes saisies correspondantes
+3. Pour chaque page, la photo s'affiche à gauche. Choisir le **mois** et taper le **premier N° d'ordre** écrit
+   sur la photo (la numérotation repart à 1 chaque mois) : le dernier N° se remplit seul (premier + 14, une
+   page ayant au plus 15 lignes), à corriger si la page en a moins. Les lignes saisies correspondantes
    s'affichent à droite, dans l'ordre du registre ; les N° absents de la saisie sont signalés, les doublons
-   (même N° deux fois) surlignés.
+   (même N° deux fois) surlignés. Il n'est pas nécessaire que la photo ait été rattachée à ses lignes lors de
+   la saisie (cas des lignes transcrites et importées en CSV) : c'est ce qu'on lit sur la photo qui les retrouve.
+   - Une photo identifiée l'est pour de bon (gardé dans la sauvegarde) : elle n'est plus à identifier lors
+     d'un contrôle suivant.
+   - Les photos étant nommées dans l'ordre de prise de vue, une photo voisine d'une photo déjà identifiée est
+     **proposée** automatiquement (même mois, N° suivants), avec un rappel de vérifier sur la photo.
 4. **Cliquer chaque case différente de la photo** (elle devient rouge). Compter avec + / − les lignes de la
    photo **oubliées** dans la saisie et les lignes saisies **en trop**.
 5. **Page vérifiée, suivante** (ou **Passer cette page** si elle est illisible ou d'un autre registre). Une page
