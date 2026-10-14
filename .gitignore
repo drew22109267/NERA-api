@@ -76,3 +76,6 @@ modeles/outil-saisie/**/*.json
 
 # Réglages locaux de l outil de développement
 .claude/
+
+# Vérification des calculs : registre fictif généré à chaque lancement
+modeles/verification/sortie/

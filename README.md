@@ -41,8 +41,12 @@ backend/
     ├── outil-saisie/             Partie 2 : outil de saisie des registres (HTML + JavaScript)
     │   ├── saisie.html           la page à ouvrir
     │   ├── LISEZMOI.md           mode d'emploi détaillé de l'outil
+    │   ├── INTERPRETER-LES-GRAPHES.md  comment lire chaque graphe (exemples fictifs)
     │   └── convertir_photos.bat  conversion des photos (HEIC → JPEG, sans métadonnées)
     ├── nera/ , svr/ , tests/     Partie 3 : code Python des modèles
+    ├── verification/             vérification de tous les calculs (outil = Python = calcul direct)
+    ├── pipeline.ipynb            toute la chaîne dans un notebook Jupyter, avec les explications
+    ├── lancer_tout.sh            toute la chaîne en une commande
     └── *.py                      scripts d'analyse, dans l'ordre décrit par modeles/README.md
 ```
 
@@ -377,9 +381,16 @@ Bouton **Sauvegarde** (barre latérale) :
 
 ## 2.11 Étape 10 · Analyser
 
-L'onglet 3 · **Indicateurs** calcule en direct, sur les lignes saisies : occupation (taux, pics, loi de
-Little, Erlang B, bilan des flux, Monte-Carlo, survie, file M/G/∞), statistiques descriptives,
+L'onglet 3 · **Indicateurs** calcule en direct, sur les lignes saisies : occupation (taux, pic de la journée,
+loi de Little, Erlang B, bilan des flux, Monte-Carlo, survie, file M/G/∞), statistiques descriptives,
 corrélations et tests, ACP, calendrier camerounais, séries temporelles et modèles de prévision.
+
+- **Comptage** (bouton Calcul) : recensement de minuit, présence dans la journée, présence pondérée par le
+  temps, ou les trois côte à côte. **Lits** : capacité de départ et changements (`01/03/25=20`).
+- **Graphes jour par jour** : regroupement jour, semaine, mois, année ; zoom, déplacement, animation.
+- **Légendes cliquables** : masquer ou afficher chaque courbe.
+- **Lecture de chaque graphe**, avec des exemples fictifs :
+  [`modeles/outil-saisie/INTERPRETER-LES-GRAPHES.md`](modeles/outil-saisie/INTERPRETER-LES-GRAPHES.md).
 
 **Période verrouillée.** Les lignes entrées à partir du **01/09/2026** sont gardées mais n'entrent dans
 **aucune** analyse : septembre et octobre 2026 sont réservés au test final du modèle (partie 3).
@@ -415,3 +426,15 @@ de chaque décision (avec le banc de comparaison qui la teste) : [`modeles/METHO
 
 Installation, ordre des scripts, toutes les formules mathématiques, lecture des figures et tests :
 [`modeles/README.md`](modeles/README.md).
+
+Toute la chaîne, sur la dernière version du CSV exporté de l'outil (dans WSL, depuis `modeles/`) :
+
+```bash
+bash lancer_tout.sh                              # en une commande (journaux dans resultats/journaux)
+~/memoire-env/bin/jupyter lab pipeline.ipynb     # ou pas à pas, avec les explications
+```
+
+**Vérification des calculs.** `python -m verification.verifier_calculs` compare, sur des données fictives,
+le vrai code de l'outil de saisie (exécuté par Node), la chaîne Python et un calcul direct à partir des
+définitions, ainsi que chaque fonction statistique de l'outil à scipy et statsmodels : 118 contrôles, rapport
+dans `modeles/verification/rapport_verification.md`.

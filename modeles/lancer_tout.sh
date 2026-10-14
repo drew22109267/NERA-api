@@ -15,10 +15,11 @@
 #     SOURCE     CSV exporté de l'outil  [/mnt/c/Users/User/Desktop/MEMOIRE/saisie_ia/registre-ped-tous-les-mois.csv]
 #     LITS       capacité de référence  [20]
 #     LITS_FICHIER  capacité variable (date_debut;lits), si la date du passage de 15 à 20 lits est connue
-#     COMPTAGES  méthodes de comptage   ["minuit journee"]
+#     COMPTAGES  méthodes de comptage   ["minuit journee pondere"]
 #     HORIZONS   horizons en jours      ["1 7"]
 #
 # Étapes :
+#     0  vérification de tous les calculs sur des données fictives (outil = Python = calcul direct)
 #     1  conversion du CSV de l'outil et reconstitution de l'occupation (+ scénarios de 15 à 20 lits)
 #     2  entraînement des niveaux 0 à 5 avec recherche des hyperparamètres par grille
 #     3  banc des choix de conception (D1 à D11 : 23 modèles, noyau, perte, τ, variables…)
@@ -34,9 +35,9 @@ cd "$(dirname "$0")"
 PY="${PY:-$HOME/memoire-env/bin/python}"
 SOURCE="${SOURCE:-/mnt/c/Users/User/Desktop/MEMOIRE/saisie_ia/registre-ped-tous-les-mois.csv}"
 LITS="${LITS:-20}"
-COMPTAGES="${COMPTAGES:-minuit journee}"
+COMPTAGES="${COMPTAGES:-minuit journee pondere}"
 HORIZONS="${HORIZONS:-1 7}"
-ETAPES="${ETAPES:-1 2 3 4 5 6 7 8}"
+ETAPES="${ETAPES:-0 1 2 3 4 5 6 7 8}"
 RAPIDE_OPT=""; [ "${RAPIDE:-0}" = "1" ] && RAPIDE_OPT="--rapide"
 CAPACITE="--lits $LITS"; [ -n "${LITS_FICHIER:-}" ] && CAPACITE="--lits-fichier $LITS_FICHIER"
 JOURNAL=resultats/journaux; mkdir -p "$JOURNAL" donnees
@@ -49,6 +50,7 @@ lancer() {   # lancer <nom du journal> <commande…> : affiche le début et la f
   if "$@" > "$JOURNAL/$nom.log" 2>&1; then echo "   terminé ($JOURNAL/$nom.log)"; else echo "   ÉCHEC : voir $JOURNAL/$nom.log"; tail -5 "$JOURNAL/$nom.log"; fi
 }
 
+etape 0 && lancer verification "$PY" -m verification.verifier_calculs
 if etape 1; then
   lancer conversion "$PY" -m nera.depuis_outil "$SOURCE" --service PED --sortie "$EXPORT"
   for c in $COMPTAGES; do

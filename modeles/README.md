@@ -97,8 +97,22 @@ Installation une seule fois, dans un terminal Ubuntu :
 ```bash
 python3 -m venv ~/memoire-env
 ~/memoire-env/bin/pip install torch --index-url https://download.pytorch.org/whl/cpu
-~/memoire-env/bin/pip install pandas matplotlib pytest
+~/memoire-env/bin/pip install pandas matplotlib pytest jupyterlab
+~/memoire-env/bin/pip install scipy statsmodels      # seulement pour la vérification des calculs (juges)
 ```
+
+**Notebook.** `pipeline.ipynb` rejoue toute la chaîne, cellule par cellule, avec les explications :
+vérification des calculs, conversion du CSV de l'outil, occupation selon les trois méthodes, loi de Little,
+scénarios de lits, entraînement, bancs d'essai, figures. À relancer (*Exécuter tout*) à chaque nouvelle version
+de la saisie :
+
+```bash
+~/memoire-env/bin/jupyter lab pipeline.ipynb
+```
+
+Le notebook est versionné **sans sorties** (il est recréé par `verification/creer_notebook.py`) : avant tout
+envoi sur GitHub, *Modifier → Effacer toutes les sorties*, pour que les résultats des vraies données restent
+sur l'ordinateur.
 
 Toutes les commandes se lancent depuis ce dossier :
 
@@ -278,6 +292,66 @@ peut mesurer que ces deux bornes de lecture. Le vrai nombre de lits occupés au 
 se situe entre les deux, en général plus près du recensement de minuit (pas de chevauchement des sorties du
 matin et des entrées de l'après-midi). Le banc de prétraitement (dimension P8) et l'option `--comptage` de
 tous les scripts permettent de mener toute l'étude avec l'une ou l'autre série et de comparer les conclusions.
+
+### 5.2 ter Troisième méthode : la présence pondérée par le temps
+
+Option `--comptage pondere` (Python, avec `--heure-entree`, `--heure-sortie`, `--duree-meme-jour`) et
+« Pondérée par le temps » dans l'outil. Le registre ne donne pas les heures ; on suppose des heures typiques
+(à confirmer avec le major) : admission à h_e (12 h), sortie à h_s (11 h), séjour du même jour de m heures (8 h).
+Avec a = h_e/24, b = h_s/24, μ = m/24, la contribution d'un séjour au jour d est la fraction du jour passée
+dans le service :
+
+```
+           ⎧ 1 − a     si d = e < S          (jour d'entrée)
+           ⎪ 1         si e < d < S          (jours pleins)
+c_i(d) =   ⎨ b         si d = S > e          (jour de sortie)
+           ⎪ μ         si d = e = S          (séjour du même jour)
+           ⎩ 0         sinon
+P''_d = Σ_i w_i c_i(d)
+```
+
+Calcul : le comptage journalier, moins une correction a au jour d'entrée et (1 − b) au jour de sortie (ou
+1 − μ − a pour un séjour du même jour, puisque 1 − a − (1 − μ − a) = μ). Un enfant encore hospitalisé ne reçoit
+que la correction d'entrée.
+
+Conséquence exacte pour la loi de Little : W'' = n + (b − a) pour un séjour de n ≥ 1 nuit, μ pour un séjour du
+même jour ; `verifier_little` utilise cette durée.
+
+| | Pondérée par le temps |
+|---|---|
+| Ce qu'elle mesure | le nombre moyen de lits occupés sur 24 h (l'occupation réelle, si les heures sont justes) |
+| Mises en observation | comptées pour leur durée (μ) |
+| Rotation dans la journée | un lit libéré à 11 h et réoccupé à 12 h compte b + (1 − a) ≈ 0,96, pas 2 |
+| Limite | dépend des heures supposées : si les sorties ont lieu à 15 h au lieu de 11 h, chaque séjour gagne 1/6 de jour ; le banc P8 et les options `--heure-*` mesurent cette sensibilité |
+
+### 5.2 quater Le pic de la journée : un encadrement exact
+
+Les trois méthodes donnent un nombre moyen. Pour dimensionner, il faut le **plus grand nombre d'enfants
+présents en même temps** le jour d. Sans les heures, on l'encadre exactement :
+
+```
+max(P_{d−1}, P_d) ≤ pic_d ≤ P'_d
+```
+
+- borne basse : les enfants présents à minuit (début ou fin de la journée) sont présents ensemble à cet instant ;
+- borne haute : personne n'est présent dans la journée sans être compté par le comptage journalier.
+
+Colonnes `pic_bas` et `pic_haut` de `occupation_<SERVICE>.csv` ; rubrique « Pic de la journée » de l'outil.
+Un jour où même la borne basse dépasse les lits est un sureffectif **certain** ; si seule la borne haute les
+dépasse, il est **possible**.
+
+### 5.2 quinquies Capacité variable
+
+Le service est passé de 15 à 20 lits à une date inconnue, et tous les lits ne sont peut-être pas utilisables.
+Le taux d'occupation utilise la capacité **de chaque jour** :
+
+```
+TOM = Σ_d P_d / Σ_d lits_d          sureffectif_d = 1(P_d > lits_d)
+```
+
+Python : `--lits-fichier lits_PED.csv` (colonnes `date_debut;lits`) ; outil : « Changements » dans le bouton
+Calcul (`01/03/25=20`). Tant que la date est inconnue, `--scenarios-lits 15 16 17 18 19 20` donne le taux pour
+chaque capacité : on présente une plage, pas un chiffre.
 
 ### 5.3 Convention du nombre de jours : estimation de p avec rétrécissement
 
@@ -1450,6 +1524,25 @@ localement.
 Les fichiers JavaScript se vérifient par `node --check <fichier>.js` (syntaxe), puis dans le
 navigateur : chaque section de l'outil affiche « Calcul impossible » avec le message d'erreur si
 un calcul échoue.
+
+### 17.1 Vérification complète des calculs (`verification/`)
+
+```bash
+~/memoire-env/bin/python -m verification.verifier_calculs
+```
+
+Sur des **données fictives** (registre inventé de 9 mois, séries simulées), 118 contrôles, chacun « JUSTE »
+ou « ÉCART », écrits dans `verification/rapport_verification.md` :
+
+| Partie | Ce qui est comparé |
+|---|---|
+| A. Occupation | le **vrai code de l'outil** (`saisie.html`, exécuté par Node via `outil_node.mjs`, sans copie), la chaîne Python et un calcul « à la force brute » écrit à partir des définitions, jour par jour : trois méthodes, trois scénarios, pic de la journée, admissions, capacité de 15 puis 20 lits, taux et sureffectif |
+| B. Statistiques de l'outil | chaque fonction de `statistiques.js` contre scipy, statsmodels et numpy (juges seulement) : lois (Γ, bêta, normale, Student, χ², Fisher), Wilson, descriptif complet, Pearson, Spearman, Kendall, χ² et V de Cramér, Welch, ANOVA, Kruskal-Wallis, Mann-Whitney, régression (coefficients, erreurs-types, p, R², F), Jacobi, ACP (valeurs propres, Bartlett, KMO, coordonnées), ACF, PACF, Ljung-Box, ADF, KPSS, périodogramme, métriques, Diebold-Mariano ; pour le lissage, l'AR et l'ARMA par CSS, l'optimum trouvé par l'outil est comparé à une recherche exhaustive |
+| C. Cas faits à la main | séjour de 3 nuits et séjour du même jour dans les trois méthodes, sortie calculée ambiguë, Wilson 0/10 |
+
+Node doit être installé (sous WSL, le `node.exe` de Windows est trouvé automatiquement). Seule différence
+connue, voulue : l'outil prend z = 1,96 dans l'intervalle de Wilson au lieu de 1,959964 (écart sur la
+5e décimale, contrôlé à part).
 
 ---
 

@@ -227,6 +227,13 @@ au-delà, la saisie est à reprendre. Le contrôle se fait en plusieurs séances
   clavier ; `Échap` pour fermer).
 - **Survol** : la souris sur une courbe montre la date et toutes les valeurs du jour ; sur une barre, une
   case, un point ou une boîte, la valeur exacte.
+- **Navigation dans le temps** (graphes jour par jour, comme une application de cours de bourse) :
+  **Jour · Semaine · Mois · Année** (chaque point devient la moyenne de la période) ; **−** / **+** ou la
+  molette pour dézoomer ou zoomer à l'endroit pointé ; **‹ ›** ou glisser pour se déplacer ; **Tout** pour
+  revenir à toute la période ; **Animation** fait avancer les courbes dans le temps (Pause pour arrêter). La vue
+  est gardée pour chaque rubrique et s'applique aux trois méthodes.
+- **Légende cliquable** : un clic sur un élément de légende masque la courbe, la bande ou les barres
+  correspondantes ; un second clic les réaffiche. Le choix est gardé, même après un zoom ou un recalcul.
 - **Comment lire** : chaque statistique a son explication (case à cocher en bas de la barre latérale pour
   les masquer).
 - **Mise à jour automatique** : tout est recalculé quand une ligne est enregistrée, importée, corrigée ou
@@ -281,14 +288,28 @@ mois où au moins 90 % des durées sont connues. C'est pourquoi les statistiques
 ne comptent que les séjours **terminés pendant la période de calcul** : un encadré de la synthèse détaille
 où va chaque ligne.
 
-### Occupation : deux méthodes de comptage
+### Occupation : trois méthodes de comptage
 
 Bouton **Calcul** → **Comptage** :
 
-| Méthode | Un enfant compte le jour d si | Séjour de 3 nuits | Mise en observation |
+| Méthode | Un enfant compte le jour d | Séjour de 3 nuits | Mise en observation |
 |---|---|---|---|
-| **Recensement de minuit** (défaut, norme hospitalière) | entrée ≤ d < sortie | 3 jours | 0 |
-| **Présence dans la journée** | entrée ≤ d ≤ sortie | 4 jours | 1 |
+| **Recensement de minuit** (défaut, norme hospitalière) | 1 si entrée ≤ d < sortie | 3 jours | 0 |
+| **Présence dans la journée** | 1 si entrée ≤ d ≤ sortie | 4 jours | 1 |
+| **Pondérée par le temps** | la part du jour passée dans le service : 1 − h_e/24 le jour d'entrée, 1 les jours pleins, h_s/24 le jour de sortie | 3 + (h_s − h_e)/24 | m/24 |
+| **Toutes les méthodes** | les trois graphes l'un sous l'autre, dans chaque rubrique qui en dépend | | |
+
+Heures typiques de la méthode pondérée (même bouton) : entrée 12 h, sortie 11 h, séjour du même jour 8 h, à
+confirmer avec le major. Les rubriques qui ne dépendent pas de la méthode (admissions, flux, durées) ne sont
+dessinées qu'une fois.
+
+**Pic de la journée** (rubrique Occupation) : le plus grand nombre d'enfants présents en même temps est encadré
+exactement, sans hypothèse d'heure, entre le plus grand des deux minuits qui encadrent la journée et le comptage
+de la journée.
+
+**Capacité variable** : « Lits du service » est la capacité de départ ; « Changements » ajoute les
+changements de capacité, un par ligne ou séparés par « ; » (`01/03/25=20`). Taux, sureffectif, rotation et
+intervalle de rotation utilisent les lits de chaque jour.
 
 Le comptage journalier ajoute environ une journée par séjour : le taux d'occupation augmente d'environ
 « admissions par jour ÷ lits ». Tous les calculs suivent la méthode choisie (journées, taux, loi de Little
