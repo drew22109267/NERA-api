@@ -560,6 +560,8 @@
               <select id="indInconnues" class="input"><option value="exclure">exclue</option><option value="estimee">estimée (prix, issue)</option><option value="mediane">= durée médiane</option></select></label>
             <label class="ind-champ" title="Un enfant sans sortie est compté « encore hospitalisé » jusqu'à la fin de la saisie s'il est entré depuis moins de…">Encore hospitalisé si entré depuis &lt;
               <select id="indCensure" class="input"><option value="fixe">30 jours</option><option value="p95">p95 des séjours</option></select></label>
+            <label class="ind-champ" title="Recensement de minuit : un enfant compte les nuits passées (entrée ≤ jour < sortie), norme des statistiques hospitalières. Comptage journalier : il compte chaque jour où il est présent, jour de sortie compris (entrée ≤ jour ≤ sortie) ; une mise en observation compte alors 1 jour.">Comptage
+              <select id="indComptage" class="input"><option value="minuit">recensement de minuit</option><option value="journee">présence dans la journée</option></select></label>
           </div>
         </div>
         <div class="ind-pop-zone">
@@ -2016,12 +2018,15 @@ const MAX_NUITS = 90                 // au-delà : erreur d'écriture, durée tr
 //              de même prix, sinon de même issue : nera/imputation.py) ;
 //   censure    'fixe' (NERA, 30 jours) ou 'p95' : sans sortie, « encore hospitalisé » seulement si admis depuis moins
 //              de p95 nuits (95 % des séjours sont plus courts) ; au-delà, l'enfant est presque sûrement sorti.
-const METHODE_DEFAUT = { seuil: 0.9, inconnues: 'exclure', censure: 'fixe' }
+const METHODE_DEFAUT = { seuil: 0.9, inconnues: 'exclure', censure: 'fixe', comptage: 'minuit' }
 // Une date suivie d'un « ? » (doute à la transcription) reste utilisable pour les calculs.
 const lireDateSouple = (v) => lireDate(String(v ?? '').replace(/\s*\?+\s*$/, '').trim())
 function calculerIndicateurs(lits, par, methode = METHODE_DEFAUT) {
   const lireDate = lireDateSouple
-  const { seuil, inconnues, censure } = { ...METHODE_DEFAUT, ...methode }
+  const { seuil, inconnues, censure, comptage } = { ...METHODE_DEFAUT, ...methode }
+  // Comptage : « minuit » → présent les jours entrée ≤ d < sortie (nuits) ; « journee » → entrée ≤ d ≤ sortie
+  // (chaque jour de présence, jour de sortie compris). Toutes les fins de séjour sont décalées d'un jour.
+  const decal = comptage === 'journee' ? 1 : 0
   const r = registre(), cfgV = CONFIG.dateVerrou ? lireDate(CONFIG.dateVerrou.split('-').reverse().join('/')) : null
   const verrou = cfgV ? jourNum(cfgV.d) : Infinity
   const moisDe = (j) => versDate(j).slice(0, 7)
@@ -2165,7 +2170,7 @@ function calculerIndicateurs(lits, par, methode = METHODE_DEFAUT) {
   const recenser = (liste) => {
     const delta = new Array(n).fill(0); let avant = 0
     for (const x of exploitables) { const e = x.entree - debut; if (e < 0) avant += 1; else if (e < n) delta[e] += 1 }
-    for (const f of liste) { const o = f.jour - debut; if (o < 0) avant -= f.poids; else if (o < n) delta[o] -= f.poids }
+    for (const f of liste) { const o = f.jour + decal - debut; if (o < 0) avant -= f.poids; else if (o < n) delta[o] -= f.poids }
     const res = []; let c = avant
     for (let i = 0; i < n; i++) { c += delta[i]; res.push(Math.round(c * 1e10) / 1e10) }
     return res
@@ -2185,6 +2190,8 @@ function calculerIndicateurs(lits, par, methode = METHODE_DEFAUT) {
       tom: tom(presents), tomBas: tom(bas), tomHaut: tom(haut), max: J ? arr(Math.max(...idx.map((i) => presents[i])), 2) : 0,
       sur: lits ? idx.filter((i) => presents[i] > lits).length : 0,
       dms: ns ? arr(sorties.reduce((a, f) => a + f.poids * (f.jour - f.x.entree), 0) / ns, 2) : null,
+      // Durée qui correspond au comptage (loi de Little L = λW) : nuits au recensement de minuit, nuits + 1 en journée.
+      wComptage: ns ? arr(sorties.reduce((a, f) => a + f.poids * (f.jour - f.x.entree + decal), 0) / ns, 2) : null,
       rot: lits ? arr(ns / lits, 2) : null, inter: lits && ns ? arr((lits * J - JH) / ns, 2) : null,
       dc: arr(dc, 2), mort: ns ? arr(100 * dc / ns, 2) : null }
   }
@@ -2197,6 +2204,7 @@ function calculerIndicateurs(lits, par, methode = METHODE_DEFAUT) {
     pendantRodage: exploitables.filter((x) => x.statut !== 'imputee' && x.sortie !== null && x.sortie <= debut).length,
     encoreHospitalises: exploitables.filter((x) => x.sortie === null).length,
     dansPeriode: Math.round(termines.reduce((a, f) => a + f.poids, 0)) }
+  reglages.comptage = comptage; reglages.decal = decal
   return { repartition, convention, statuts, reglages, debut: versDate(debut), fin: versDate(fin), premierMois: mois[i0], rodage, lignes, presents, bas, haut,
     debutNum: debut, adm, premierSaisi: versDate(premierSaisi), dernierSaisi: versDate(dernierSaisi), base: versDate(base),
     sorties: termines.map((f) => ({ jour: f.jour, poids: f.poids, nuits: f.jour - f.x.entree, l: f.x.l })),
@@ -2311,10 +2319,11 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document
 // Résumé lisible des réglages sur le bouton (« 20 lits · ≥ 70 % · estimée · p95 »)
 function resumerCalcul() {
   const lits = $('#indLits').value, inc = { exclure: 'exclue', estimee: 'estimée', mediane: 'médiane' }[$('#indInconnues').value], cen = $('#indCensure').value === 'p95' ? 'p95' : '30 j'
-  $('#resumeCalcul').textContent = `${lits ? `${lits} lits` : 'lits ?'} · ≥ ${Math.round(100 * +$('#indSeuil').value)} % · ${inc} · ${cen}`
+  const cpt = $('#indComptage').value === 'journee' ? 'journée' : 'minuit'
+  $('#resumeCalcul').textContent = `${lits ? `${lits} lits` : 'lits ?'} · ≥ ${Math.round(100 * +$('#indSeuil').value)} % · ${inc} · ${cen} · ${cpt}`
   $('#indParChoix').value = document.querySelector('input[name=indPar]:checked').value
 }
-['#indLits', '#indSeuil', '#indInconnues', '#indCensure'].forEach((k) => $(k).addEventListener('input', resumerCalcul))
+['#indLits', '#indSeuil', '#indInconnues', '#indCensure', '#indComptage'].forEach((k) => $(k).addEventListener('input', resumerCalcul))
 // Barre latérale : réduite (icônes seules, mémorisé) ou ouverte par-dessus la page sur petit écran.
 const reduireSidebar = (oui) => { $('#shell').classList.toggle('collapsed', oui); $('#reduireSidebar').setAttribute('aria-expanded', String(!oui)); $('#reduireSidebar').title = oui ? 'Agrandir la barre latérale' : 'Réduire la barre latérale' }
 try { reduireSidebar(localStorage.getItem('saisie.sidebarReduite') === '1') } catch {}
@@ -2354,7 +2363,7 @@ else { construireFormulaire(); majSuggestions(); majListePhotos(); sauver(); nou
 </script>
 <script src="calendrier.js?v=1"></script>
 <script src="statistiques.js?v=12"></script>
-<script src="indicateurs.js?v=51"></script>
-<script src="occupation-validation.js?v=3"></script>
+<script src="indicateurs.js?v=52"></script>
+<script src="occupation-validation.js?v=4"></script>
 </body>
 </html>

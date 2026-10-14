@@ -103,10 +103,13 @@ def lits_par_jour(lits, jours: pd.DatetimeIndex) -> pd.Series:
 
 def reconstituer_occupation(sejours: pd.DataFrame, date_extraction: str | pd.Timestamp,
                             lits: int | pd.Series | None = None, debut: str | None = None,
-                            scenario: str = "attendue") -> pd.DataFrame:
+                            scenario: str = "attendue", comptage: str = "minuit") -> pd.DataFrame:
     """
     Une ligne par jour, de la première admission (ou `debut`) à la veille de l'extraction :
-      presents          enfants hospitalisés à minuit (espérance pour le scénario « attendue »)
+      presents          enfants hospitalisés (espérance pour le scénario « attendue ») selon `comptage` :
+                          « minuit »  : recensement de minuit, présent si entrée ≤ d < sortie (nuits passées) ;
+                          « journee » : présent dans la journée, entrée ≤ d ≤ sortie (jour de sortie compris ;
+                                        un enfant entré et sorti le même jour compte 1)
       dont_censures     parmi eux, ceux dont la sortie n'est pas encore connue
       admissions        entrées du jour
       sorties_*         sorties du jour, par issue (pondérées pour les sorties calculées)
@@ -117,6 +120,10 @@ def reconstituer_occupation(sejours: pd.DataFrame, date_extraction: str | pd.Tim
     if s.empty:
         raise ValueError("Aucun séjour exploitable pour reconstituer l'occupation.")
     ev = sorties_possibles(sejours, extraction, scenario)
+    if comptage not in ("minuit", "journee"):
+        raise ValueError("comptage : « minuit » ou « journee ».")
+    # Comptage journalier : chaque fin de séjour est décalée d'un jour pour la présence (pas pour les sorties).
+    ev_presence = ev.assign(fin=ev["fin"] + pd.Timedelta(days=1)) if comptage == "journee" else ev
 
     premier = pd.Timestamp(debut) if debut else s["entree"].min()
     jours = pd.date_range(premier, extraction - pd.Timedelta(days=1), freq="D")
@@ -132,14 +139,14 @@ def reconstituer_occupation(sejours: pd.DataFrame, date_extraction: str | pd.Tim
 
     occ = pd.DataFrame(index=jours)
     occ.index.name = "jour"
-    occ["presents"] = cumul(s["entree"], ev)
+    occ["presents"] = cumul(s["entree"], ev_presence)
     cens = s["statut"] == "censuree"
-    occ["dont_censures"] = (cumul(s.loc[cens, "entree"], ev[ev["sejour"].isin(s.index[cens])]).astype(int)
+    occ["dont_censures"] = (cumul(s.loc[cens, "entree"], ev_presence[ev_presence["sejour"].isin(s.index[cens])]).astype(int)
                             if cens.any() else 0)
     # Parmi les présents, ceux dont la durée est estimée : mesure de la fiabilité de chaque jour,
     # utilisable par le modèle (variable, ou poids d'apprentissage plus faible quand la part est forte).
     imp = s["statut"] == "imputee"
-    occ["dont_estimes"] = cumul(s.loc[imp, "entree"], ev[ev["sejour"].isin(s.index[imp])]) if imp.any() else 0.0
+    occ["dont_estimes"] = cumul(s.loc[imp, "entree"], ev_presence[ev_presence["sejour"].isin(s.index[imp])]) if imp.any() else 0.0
     occ["admissions"] = s["entree"].value_counts().reindex(jours, fill_value=0).astype(int)
     reelles = ev[ev["reelle"]]
     for issue in ISSUES:
@@ -156,9 +163,9 @@ def reconstituer_occupation(sejours: pd.DataFrame, date_extraction: str | pd.Tim
 
 
 def trois_scenarios(sejours: pd.DataFrame, date_extraction, lits: int | pd.Series | None = None,
-                    debut: str | None = None) -> dict[str, pd.DataFrame]:
+                    debut: str | None = None, comptage: str = "minuit") -> dict[str, pd.DataFrame]:
     """Les trois séries (attendue, basse, haute), sur les mêmes jours."""
-    return {sc: reconstituer_occupation(sejours, date_extraction, lits, debut, sc) for sc in SCENARIOS}
+    return {sc: reconstituer_occupation(sejours, date_extraction, lits, debut, sc, comptage) for sc in SCENARIOS}
 
 
 def resume_occupation(occ: pd.DataFrame) -> dict:

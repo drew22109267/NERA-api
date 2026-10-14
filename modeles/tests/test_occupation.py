@@ -34,6 +34,24 @@ def test_recensement_de_minuit():
     assert occ["sureffectif"].max() == 1                         # 2 enfants pour 1 lit le 3
 
 
+def test_comptage_journalier_jour_de_sortie_compris():
+    # Mêmes séjours que ci-dessus, comptés chaque jour de présence (entrée ≤ d ≤ sortie) :
+    # A compte du 1er au 4 (4 jours), B compte le 2 (1 jour), C du 3 au 5.
+    df = table([("PED", "2026-01-01", "2026-01-04", "Sortie", False),
+                ("PED", "2026-01-02", "2026-01-02", "Sortie", False),
+                ("PED", "2026-01-03", None, None, False)])
+    s, _ = preparer_sejours(df, "PED", "2026-01-06")
+    minuit = reconstituer_occupation(s, "2026-01-06", lits=1)
+    jour = reconstituer_occupation(s, "2026-01-06", lits=1, comptage="journee")
+    assert jour["presents"].tolist() == [1, 2, 2, 2, 1]
+    assert jour["sorties_sortie"].tolist() == minuit["sorties_sortie"].tolist()     # les sorties ne bougent pas
+    assert jour["admissions"].tolist() == minuit["admissions"].tolist()
+    # Chaque séjour terminé dans la fenêtre ajoute exactement un jour de présence (A et B : + 2).
+    assert jour["presents"].sum() - minuit["presents"].sum() == 2
+    with pytest.raises(ValueError):
+        reconstituer_occupation(s, "2026-01-06", comptage="midi")
+
+
 def test_sortie_inconnue_exclue_et_autre_service_ignore():
     df = table([("PED", "2025-06-01", None, None, False),          # ancien, sans sortie → inconnue
                 ("MED", "2026-01-01", "2026-01-03", "Sortie", False),

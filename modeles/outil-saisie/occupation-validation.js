@@ -52,7 +52,8 @@
     const d = c.d, n = d.presents.length, deb = d.debutNum, A = new Array(n).fill(0), S = new Array(n).fill(0)
     for (const s of sejoursExploitables(d)) {
       const i = s.entree - deb; if (i >= 0 && i < n) A[i]++
-      const fins = s.sortie === null ? [] : s.statut === 'calculee' && s.basse < s.sortie ? [[s.basse, s.p], [s.sortie, 1 - s.p]] : [[s.sortie, 1]]
+      const dc = d.reglages?.decal ?? 0     // comptage journalier : l'enfant compte encore le jour de sa sortie
+      const fins = s.sortie === null ? [] : s.statut === 'calculee' && s.basse < s.sortie ? [[s.basse + dc, s.p], [s.sortie + dc, 1 - s.p]] : [[s.sortie + dc, 1]]
       for (const [j, w] of fins) { const k = j - deb; if (k >= 0 && k < n && w > 0) S[k] += w }
     }
     // P(t) = P(t − 1) + entrées(t) − sorties(t), en partant de l'effectif du premier jour.
@@ -87,7 +88,8 @@
     const rnd = alea(20250611), series = [], moyennes = [], sur = [], maxi = []
     for (let r = 0; r < N; r++) {
       const diff = new Float64Array(n + 1)
-      const ajouter = (e, sortie) => { const a = Math.max(e, deb), b = Math.min((sortie ?? fin + 1) - 1, fin); if (b >= a) { diff[a - deb] += 1; diff[b - deb + 1] -= 1 } }
+      const dc = d.reglages?.decal ?? 0
+      const ajouter = (e, sortie) => { const a = Math.max(e, deb), b = Math.min((sortie === null ? fin + 1 : sortie + dc) - 1, fin); if (b >= a) { diff[a - deb] += 1; diff[b - deb + 1] -= 1 } }
       for (const s of tous) {
         if (s.statut === 'observee') ajouter(s.entree, s.sortie)
         else if (s.statut === 'calculee') ajouter(s.entree, s.basse < s.sortie && rnd() < s.p ? s.basse : s.sortie)
@@ -167,7 +169,7 @@
   // ── 4. Modèle de file M/G/∞ ────────────────────────────────────────────────────────────
   function rendreFileMGinf(c, W, H) {
     const d = c.d, p = d.presents, n = p.length, lits = c.lits
-    const T = d.lignes.at(-1), lam = T.adm / T.J, Wm = T.dms, m = p.reduce((a, b) => a + b, 0) / n, v = p.reduce((a, b) => a + (b - m) ** 2, 0) / (n - 1)
+    const T = d.lignes.at(-1), lam = T.adm / T.J, Wm = T.wComptage ?? T.dms, m = p.reduce((a, b) => a + b, 0) / n, v = p.reduce((a, b) => a + (b - m) ** 2, 0) / (n - 1)
     const kmax = Math.max(lits ?? 0, Math.ceil(Math.max(...p))) + 4, ks = Array.from({ length: kmax + 1 }, (_, k) => k)
     const lnF = (k) => Sx.lnGamma(k + 1)
     const poisson = (mu) => ks.map((k) => Math.exp(k * Math.log(mu) - mu - lnF(k)))
@@ -184,7 +186,7 @@
       const moy = ks.reduce((a, k) => a + k * dist[k], 0), va = ks.reduce((a, k) => a + (k - moy) ** 2 * dist[k], 0)
       return [nom, nf(moy, 2), nf(va, 2), ...seuils.map((s) => `${nf(100 * queue(dist, s), 1)} %`)]
     })
-    return { avant: bandeauStats([['λ admissions / jour', nf(lam, 2)], ['W durée moyenne (nuits)', nf(Wm, 2)], ['λ·W (moyenne théorique)', nf(lam * Wm, 2)], ['Moyenne observée', nf(m, 2)], ['Variance observée', nf(v, 2)], ['Indice de dispersion (variance ÷ moyenne)', nf(v / m, 2)]]),
+    return { avant: bandeauStats([['λ admissions / jour', nf(lam, 2)], [d.reglages?.decal ? 'W durée moyenne (jours de présence)' : 'W durée moyenne (nuits)', nf(Wm, 2)], ['λ·W (moyenne théorique)', nf(lam * Wm, 2)], ['Moyenne observée', nf(m, 2)], ['Variance observée', nf(v, 2)], ['Indice de dispersion (variance ÷ moyenne)', nf(v / m, 2)]]),
       html: `${courbesXY({ W, H, xmin: -0.5, xmax: kmax + 0.5, ymin: 0, ymax: Math.max(...obs, ...pois, ...melange) * 1.15, titreX: 'Nombre d’enfants présents à minuit', titreY: 'Part des jours',
           barres: [{ nom: 'Observé', pts: ks.map((k) => [k, obs[k]]), couleur: COUL.bleu, opacite: 0.55 }],
           series: [{ nom: 'Poisson (λ·W)', pts: ks.map((k) => [k, pois[k]]), couleur: COUL.rouge, points: true }, { nom: 'Mélange par mois', pts: ks.map((k) => [k, melange[k]]), couleur: COUL.vert, points: true }, { nom: 'Binomiale négative', pts: ks.map((k) => [k, bn[k]]), couleur: COUL.violet, pointille: '5 3' }] })}

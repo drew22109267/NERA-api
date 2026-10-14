@@ -86,6 +86,8 @@ def main() -> None:
                    help="durées inconnues : exclues (défaut), médiane du service, ou estimées par le prix puis l'issue")
     p.add_argument("--rodage-debut", action="store_true",
                    help="saisie commencée en cours de route (fenêtre courte) : écarte les premières semaines")
+    p.add_argument("--comptage", choices=["minuit", "journee"], default="minuit",
+                   help="minuit : nuits passées (entrée ≤ jour < sortie) ; journee : jour de sortie compris")
     p.add_argument("--seuil-duree", type=float, default=0.9,
                    help="part minimale de durées connues par mois pour reconstituer l'occupation (0,9)")
     a = p.parse_args()
@@ -131,7 +133,7 @@ def main() -> None:
     print(f"\nPremier mois complet : {periode['premier_mois_complet']} · rodage : {periode['rodage_jours']} j"
           f" → occupation reconstituée à partir du {periode['debut']:%d/%m/%Y}")
 
-    occs = trois_scenarios(sejours, extraction, lits=lits, debut=periode["debut"])
+    occs = trois_scenarios(sejours, extraction, lits=lits, debut=periode["debut"], comptage=a.comptage)
 
     # Diagramme de flux : d'où viennent les séjours utilisés, et pourquoi les autres sont écartés.
     fin_sejour = sejours["sortie"].fillna(pd.Timestamp(extraction))
@@ -158,7 +160,7 @@ def main() -> None:
 
     print("\n── Loi de Little (L = λW), scénario attendu")
     try:
-        little = verifier_little(occ, sejours, scenario="attendue")
+        little = verifier_little(occ, sejours, scenario="attendue", comptage=a.comptage)
         for k, v in little.items():
             print(f"  {k} : {v}")
         if lits is not None:

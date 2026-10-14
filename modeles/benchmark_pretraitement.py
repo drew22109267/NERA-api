@@ -10,6 +10,7 @@ Chaque dimension change UNE décision de prétraitement et garde toutes les autr
   P5  Période exploitable     part de durées connues ≥ 80 % · 90 % (retenu) · 95 % · rodage compté dès le début
   P6  Fin de série            aucune coupe · 7 derniers jours retirés · p95 du délai d'inscription  (retenu)
   P7  Trous (≥ 4 jours sans admission)  gardés (retenu) · lignes d'apprentissage qui les touchent exclues
+  P8  Méthode de comptage     recensement de minuit (retenu) · présence dans la journée (jour de sortie compris)
 
 Pourquoi deux mesures d'erreur
 ------------------------------
@@ -67,6 +68,7 @@ class Pretraitement:
     rodage_debut: bool = False
     fin: int | str = "p95"              # jours retirés en fin de série : 0, 7 ou « p95 » du délai d'inscription
     trous: str = "garder"               # garder | exclure
+    comptage: str = "minuit"            # minuit | journee
 
 
 RETENU = Pretraitement()
@@ -87,6 +89,8 @@ DIMENSIONS = {
                                                  ("p95 du délai d'inscription", dict(fin="p95"))]),
     "P7": ("Trous de saisie (≥ 4 jours sans admission)", [("Gardés tels quels", dict(trous="garder")),
                                                           ("Lignes d'apprentissage qui les touchent exclues", dict(trous="exclure"))]),
+    "P8": ("Méthode de comptage des présents", [("Recensement de minuit (nuits passées)", dict(comptage="minuit")),
+                                                ("Présence dans la journée (jour de sortie compris)", dict(comptage="journee"))]),
 }
 
 
@@ -107,7 +111,7 @@ def construire_serie(df: pd.DataFrame, service: str, lits, cfg: Pretraitement) -
         d, _ = retirer_reports_confirmes(df, reperer_reports(df, service))
     sejours, _ = preparer_sejours(d, service, DATE_VERROU, cfg.censure, cfg.inconnues)
     per = periode_exploitable(sejours, cfg.seuil, rodage_au_debut=cfg.rodage_debut)
-    occ = reconstituer_occupation(sejours, DATE_VERROU, lits=lits, debut=per["debut"], scenario=cfg.scenario)
+    occ = reconstituer_occupation(sejours, DATE_VERROU, lits=lits, debut=per["debut"], scenario=cfg.scenario, comptage=cfg.comptage)
     coupe = delai_inscription(d, service) if cfg.fin == "p95" else int(cfg.fin)
     if coupe:
         occ = occ.iloc[:-coupe]
@@ -185,7 +189,7 @@ def main() -> None:
                 occ, sej, info = construire_serie(df, a.service, a.lits, cfg)
                 prev = prevoir(occ, h, hp, debut_val, a.pas, cfg.trous)
                 try:
-                    little = verifier_little(occ, sej, scenario=cfg.scenario)["ecart_pourcent"]
+                    little = verifier_little(occ, sej, scenario=cfg.scenario, comptage=cfg.comptage)["ecart_pourcent"]
                 except Exception:                                   # période trop courte, etc.
                     little = float("nan")
                 res.append((nom + (" (retenu)" if cfg == RETENU else ""), cfg == RETENU, occ, prev, info, little, time.perf_counter() - debut))

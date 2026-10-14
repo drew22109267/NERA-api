@@ -175,7 +175,7 @@ function serieChoisie(c, cle) {
   if (cle === 'taux' && lits) return { x: d.presents.map((v) => 100 * v / lits), bas: d.bas.map((v) => 100 * v / lits), haut: d.haut.map((v) => 100 * v / lits), nom: 'Taux d’occupation', unite: ' %', cap: 100 }
   if (cle === 'adm') return { x: d.adm.slice(), nom: 'Admissions du jour', unite: '' }
   if (cle === 'sor') return { x: sortiesParJour(d), nom: 'Sorties du jour', unite: '' }
-  return { x: d.presents.slice(), bas: d.bas, haut: d.haut, nom: 'Enfants présents à minuit', unite: '', cap: lits }
+  return { x: d.presents.slice(), bas: d.bas, haut: d.haut, nom: d.reglages?.comptage === 'journee' ? 'Enfants présents dans la journée' : 'Enfants présents à minuit', unite: '', cap: lits }
 }
 function sortiesParJour(d) { const s = new Array(d.presents.length).fill(0); for (const f of d.sorties) { const i = f.jour - d.debutNum; if (i >= 0 && i < s.length) s[i] += f.poids } return s }
 const bandeauStats = (paires) => `<div class="ind-stats">${paires.map(([l, v]) => `<div><span>${l}</span><b>${v}</b></div>`).join('')}</div>`
@@ -500,7 +500,7 @@ const litsPour = (a, cible) => { let c = 0; while (erlangB(c, a) > cible && c < 
 function rendreFileAttente(c) {
   const { d, lits } = c, L = d.lignes
   const ligne = (x) => {
-    const lam = x.J ? x.adm / x.J : null, Lm = x.J ? x.JH / x.J : null, W = x.dms, lw = lam !== null && W ? lam * W : null
+    const lam = x.J ? x.adm / x.J : null, Lm = x.J ? x.JH / x.J : null, W = x.wComptage ?? x.dms, lw = lam !== null && W ? lam * W : null
     const ecart = lw ? 100 * (Lm - lw) / lw : null, a = Lm   // charge offerte : la présence moyenne mesurée (= λW si Little tient)
     return `<tr style="cursor:default"><td>${x.periode === 'Total' ? '<b>Total</b>' : etiquettePeriode(x.periode)}</td>
       <td class="num">${aff(arrondi(lam, 2))}</td><td class="num">${aff(W)}</td><td class="num">${aff(arrondi(lw, 1))}</td><td class="num">${aff(arrondi(Lm, 1))}</td>
@@ -1642,7 +1642,7 @@ function afficherIndicateurs() {
   $('#indLits').value = lits ?? ''
   etat.indMethode ??= {}
   const methode = { ...METHODE_DEFAUT, ...(etat.indMethode[etat.service] ?? {}) }
-  $('#indSeuil').value = String(methode.seuil); $('#indInconnues').value = methode.inconnues; $('#indCensure').value = methode.censure
+  $('#indSeuil').value = String(methode.seuil); $('#indInconnues').value = methode.inconnues; $('#indCensure').value = methode.censure; $('#indComptage').value = methode.comptage ?? 'minuit'
   if (typeof resumerCalcul === 'function') resumerCalcul()
   const par = document.querySelector('input[name=indPar]:checked').value
   const d = calculerIndicateurs(lits, par, methode), st = statistiquesSaisie()
@@ -1910,7 +1910,7 @@ function appliquerLits(e) {
 }
 $('#indLits').addEventListener('input', (e) => { clearTimeout(minuterieLits); minuterieLits = setTimeout(() => appliquerLits(e), 350) })
 $('#indLits').addEventListener('change', (e) => { clearTimeout(minuterieLits); appliquerLits(e) })
-for (const [id, cle, conv] of [['#indSeuil', 'seuil', Number], ['#indInconnues', 'inconnues', String], ['#indCensure', 'censure', String]]) {
+for (const [id, cle, conv] of [['#indSeuil', 'seuil', Number], ['#indInconnues', 'inconnues', String], ['#indCensure', 'censure', String], ['#indComptage', 'comptage', String]]) {
   $(id).addEventListener('change', (e) => { etat.indMethode ??= {}; etat.indMethode[etat.service] = { ...(etat.indMethode[etat.service] ?? {}), [cle]: conv(e.target.value) }; sauver(); afficherIndicateurs() })
 }
 document.querySelectorAll('input[name=indPar]').forEach((r) => r.addEventListener('change', afficherIndicateurs))
