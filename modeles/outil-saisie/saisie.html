@@ -708,7 +708,7 @@
 // ── Utilitaires ──────────────────────────────────────────────
 const $ = (s) => document.querySelector(s)
 const echapper = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]))
-const RE_DATE = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2}|\d{4})$/
+const RE_DATE = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4}|\d{2})$/
 /**
  * Message d'erreur d'une date, ou '' si elle est correcte.
  * fin = false pendant la frappe : on ne signale que l'impossible (jour 32, mois 13) ;
@@ -1205,7 +1205,8 @@ const MOIS_LONGS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juil
 function moisLigne(l) {
   const r = registre()
   for (const v of [l[r.dateReference], l[r.sortieCalculee?.entree ?? 'date_entree']]) {
-    const m = String(v ?? '').trim().match(/^[\d?]{1,2}[\/.\-](\d{1,2})[\/.\-](\d{2}|\d{4})/)
+    // Année à 4 chiffres essayée d'abord : sinon « 02/06/2026 » serait lu en 2020 (le motif n'est pas ancré à la fin).
+    const m = String(v ?? '').trim().match(/^[\d?]{1,2}[\/.\-](\d{1,2})[\/.\-](\d{4}|\d{2})/)
     if (m && +m[1] >= 1 && +m[1] <= 12) return `${m[2].length === 2 ? '20' + m[2] : m[2]}-${m[1].padStart(2, '0')}`
   }
   return ''
@@ -1443,14 +1444,20 @@ $('#exporter').onclick = () => {
   ])
   message(`${lignes.length} ligne(s) de ${registre().nom} exportée(s).`)
 }
+// Séparateur détecté sur la première ligne (hors guillemets) : « ; » (Excel en français), « , » ou tabulation.
+function separateurCsv(texte) {
+  const premiere = (texte.split(/\r?\n/).find((l) => l.trim()) ?? '').replace(/"[^"]*"/g, '')
+  return [';', ',', '\t'].map((c) => [c, premiere.split(c).length - 1]).sort((a, b) => b[1] - a[1])[0][0]
+}
 function lireCsv(texte) {
   const lignes = []; let ligne = [], champ = '', guil = false
   texte = texte.replace(/^﻿/, '')
+  const sep = separateurCsv(texte)
   for (let i = 0; i < texte.length; i++) {
     const c = texte[i]
     if (guil) { if (c === '"' && texte[i + 1] === '"') { champ += '"'; i++ } else if (c === '"') guil = false; else champ += c }
     else if (c === '"') guil = true
-    else if (c === ';') { ligne.push(champ); champ = '' }
+    else if (c === sep) { ligne.push(champ); champ = '' }
     else if (c === '\n' || c === '\r') { if (c === '\r' && texte[i + 1] === '\n') i++; ligne.push(champ); champ = ''; lignes.push(ligne); ligne = [] }
     else champ += c
   }
@@ -1491,21 +1498,32 @@ $('#importer').addEventListener('change', async (e) => {
 // ponctuation, puis avec une liste de synonymes. Les colonnes en plus (signes et symptômes, transfusion,
 // devenir, observations, Dg TB) ne sont pas perdues : completerLigne les range dans la ligne.
 const normCol = (t) => String(t ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '')
+// Les colonnes « Nom Prénom », « Phone », « Facture » et « Méd T3 / Méd Trt » (médecin) n'ont volontairement
+// aucun synonyme : elles ne sont jamais importées.
 const SYNONYMES = {
+  n_ordre: ['n', 'no', 'num', 'numero', 'nordre', 'numerodordre'],
   date_enregistrement: ['date', 'datedenregistrement', 'dateenregistrement'], ancien_nouveau: ['na', 'an', 'nouveauancien'],
-  domicile: ['quartier', 'residence'], diagnostic: ['diagnosticdentree', 'dgentree', 'diagnosticentree'], bilan: ['bilan', 'bilandemande'],
-  t3_recu: ['traitementrecu', 't3recu', 'traitement'], ge_tdr: ['getdr', 'tdrge', 'getdrpalu'], diagnostic_sortie: ['dgsortie', 'diagnosticdesortie'],
-  t3_sortie: ['traitementdesortie', 't3sortie'], nb_jours: ['nombredejours', 'nbjours', 'nbredejours', 'nbjour'], prix: ['montant', 'prix'],
+  domicile: ['quartier', 'residence'], date_entree: ['dateentree', 'entree', 'datedadmission', 'dateadmission'],
+  date_sortie: ['datesortie', 'sortie'],
+  diagnostic: ['diagnosticdentree', 'dgentree', 'diagnosticentree', 'dg', 'dgdentree'], bilan: ['bilan', 'bilandemande'],
+  t3_recu: ['traitementrecu', 't3recu', 'traitement', 'ttrecu', 'trtrecu'], ge_tdr: ['getdr', 'tdrge', 'getdrpalu', 'gerecu', 'ge'],
+  diagnostic_sortie: ['dgsortie', 'diagnosticdesortie', 'dgdesortie'],
+  t3_sortie: ['traitementdesortie', 't3sortie', 'ttsortie', 'trtsortie'],
+  nb_jours: ['nombredejours', 'nbjours', 'nbredejours', 'nbjour', 'nbrejour', 'nbrejrs', 'nbjrs', 'nbrejours'], prix: ['montant', 'prix'],
   observation: ['devenir', 'issue', 'observation'], remarque: ['remarquedesaisie', 'remarque'],
 }
 function correspondanceColonnes(entete) {
   const n = entete.map(normCol)
   const index = colonnes().map((c) => { let i = n.indexOf(normCol(c.l)); for (const s of SYNONYMES[c.k] ?? []) if (i < 0) i = n.indexOf(s); return i })
   const pris = new Set(index), trouve = (...noms) => noms.map((x) => n.indexOf(x)).find((i) => i >= 0 && !pris.has(i)) ?? -1
-  return { index, extra: { symptomes: trouve('signesetsymptomes', 'signessymptomes', 'symptomes'), transfusion: trouve('transfusion'), observations: trouve('observations'), dgtb: trouve('dgtb') } }
+  return { index, extra: { symptomes: trouve('signesetsymptomes', 'signessymptomes', 'symptomes', 'signesymptome', 'signesymptomes', 'signessymptome'),
+    transfusion: trouve('transfusion'), observations: trouve('observations', 'annotationrouge', 'annotation', 'annotations'), dgtb: trouve('dgtb') } }
 }
 function completerLigne(l, v, extra) {
   const val = (i) => (i >= 0 ? String(v[i] ?? '').trim() : '')
+  // Montant et issue écrits ensemble (« 7500F Sortie ») : le nombre va au prix, le texte à l'observation.
+  const mp = String(l.prix ?? '').match(/^\s*(\d[\d\s.]*\d|\d)\s*(?:F(?:CFA)?\b)?\s*[;,]?\s*([A-Za-zÀ-ÿ].*)$/)
+  if (mp) { l.prix = mp[1].replace(/[\s.]/g, ''); if (!l.observation) l.observation = mp[2].trim() }
   const sympt = val(extra.symptomes)
   if (sympt && sympt !== '-') l.diagnostic = !l.diagnostic || l.diagnostic === '=' ? sympt : `${l.diagnostic} (${sympt})`
   const tr = val(extra.transfusion)
@@ -2305,6 +2323,6 @@ else { construireFormulaire(); majSuggestions(); majListePhotos(); sauver(); nou
 <script src="calendrier.js?v=1"></script>
 <script src="statistiques.js?v=12"></script>
 <script src="indicateurs.js?v=51"></script>
-<script src="occupation-validation.js?v=2"></script>
+<script src="occupation-validation.js?v=3"></script>
 </body>
 </html>

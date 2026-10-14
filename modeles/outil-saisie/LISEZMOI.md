@@ -444,6 +444,7 @@ pouls, TA, glycémie et température pour les urgences).
 | Les photos ne s'affichent plus | Normal après une réouverture : les photos ne sont jamais copiées dans l'outil → **Ouvrir les photos** à nouveau |
 | Une photo HEIC ne s'ouvre pas | La convertir avec `convertir_photos.bat` (§ 3) |
 | « Ce fichier ne correspond pas au registre » à l'import CSV | Choisir d'abord le bon **service** en haut, puis reprendre le CSV |
+| Un CSV importé n'apparaît pas dans les indicateurs | Le séparateur (« ; », « , » ou tabulation) et les noms de colonnes courants (« Date entrée », « Nbre jrs », « Montant », « Dg »…) sont reconnus automatiquement ; les colonnes Nom, Téléphone, Facture et Médecin ne sont jamais importées. Les lignes à partir du 01/09/2026 sont dans la **période de test verrouillée** : elles sont gardées mais n'entrent pas dans les indicateurs |
 | Rubriques Occupation / Séries temporelles grisées | Saisie trop courte : il faut dépasser le rodage (§ 7) ; le message de la Synthèse dit jusqu'à quelle date saisir |
 | Moins de séjours dans les durées que de lignes | Normal : seules les sorties pendant la période de calcul comptent ; l'encadré de la Synthèse détaille la répartition |
 | Une corrélation affiche « — » | Pas assez de patients ayant les deux valeurs (§ 7) |

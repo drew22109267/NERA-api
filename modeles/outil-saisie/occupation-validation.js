@@ -44,7 +44,7 @@
   // ── 1. Bilan des flux ──────────────────────────────────────────────────────────────────
   function lireComptages(texte) {
     return String(texte ?? '').split(/[;\n]+/).map((x) => x.trim()).filter(Boolean).map((x) => {
-      const m = x.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2}|\d{4})\s*[=:]\s*(\d+(?:[.,]\d+)?)$/); if (!m) return null
+      const m = x.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4}|\d{2})\s*[=:]\s*(\d+(?:[.,]\d+)?)$/); if (!m) return null
       const an = m[3].length === 2 ? 2000 + +m[3] : +m[3]; return { jour: Date.UTC(an, +m[2] - 1, +m[1]) / 86400000, n: +m[4].replace(',', '.') }
     }).filter(Boolean)
   }
