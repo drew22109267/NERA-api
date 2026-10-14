@@ -72,7 +72,10 @@ function legendeSvg(items, x0, yb, W = Infinity) {
   }).join('')
 }
 // Courbes jour par jour : series = [{nom, valeurs, couleur, epaisseur, pointille}], bandes = [{nom, bas, haut, couleur, opacite}].
-function lignesSvg({ W, H, debutNum, series, bandes = [], refs = [], titreY, suffixe = '', barres = null, verticales = [], calendrier = false }) {
+function lignesSvg({ W, H, debutNum, series, bandes = [], refs = [], titreY, suffixe = '', barres = null, verticales = [], calendrier = false, jours = null, pas = 'jour' }) {
+  // jours : premier jour de chaque point quand la vue est zoomée ou regroupée (semaine, mois, année) — voir temps.js.
+  const jourDe = (i) => (jours ? jours[i] : debutNum + i)
+  if (jours && pas !== 'jour') calendrier = false
   const nCal = Math.max(...series.map((s) => s.valeurs.length), barres ? barres.valeurs.length : 0)
   const calLeg = calendrier ? [{ nom: 'vacances scolaires', couleur: COUL.vert, bande: true, opacite: 0.12 }, { nom: 'jour férié', couleur: COUL.rouge, epaisseur: 1.4, pointille: '3 2' }] : []
   const leg = [...calLeg, ...(barres ? [{ nom: barres.nom, couleur: barres.couleur, barre: true }] : []),...series.map((s) => ({ nom: s.nom, couleur: s.couleur, epaisseur: s.epaisseur, pointille: s.pointille })), ...bandes.map((b) => ({ nom: b.nom, couleur: b.couleur, opacite: b.opacite, bande: true })), ...refs.map((r) => ({ nom: r.nom, couleur: r.couleur, pointille: '6 4' }))]
@@ -84,21 +87,24 @@ function lignesSvg({ W, H, debutNum, series, bandes = [], refs = [], titreY, suf
   const chemin = (vals) => { let s = '', ouvert = false; vals.forEach((v, i) => { if (v === null || !Number.isFinite(v)) { ouvert = false; return } s += `${ouvert ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`; ouvert = true }); return s }
   const zone = (bas, haut) => { const idx = bas.map((_, i) => i).filter((i) => bas[i] !== null && haut[i] !== null); if (!idx.length) return ''
     return idx.map((i, k) => `${k ? 'L' : 'M'}${x(i).toFixed(1)},${y(haut[i]).toFixed(1)}`).join('') + idx.slice().reverse().map((i) => `L${x(i).toFixed(1)},${y(bas[i]).toFixed(1)}`).join('') + 'Z' }
-  const debutsMois = Array.from({ length: n }, (_, i) => i).filter((i) => versDate(debutNum + i).endsWith('-01'))
-  const pas = Math.max(1, Math.ceil(debutsMois.length / Math.max(4, Math.floor((W - ml) / 70))))
+  const debutsMois = Array.from({ length: n }, (_, i) => i).filter((i) => (pas === 'annee' ? true
+    : jours ? i === 0 || versDate(jourDe(i)).slice(0, 7) !== versDate(jourDe(i - 1)).slice(0, 7) : versDate(debutNum + i).endsWith('-01')))
+  const pasEtiq = Math.max(1, Math.ceil(debutsMois.length / Math.max(4, Math.floor((W - ml) / 70))))
   const lb = barres ? Math.max(1, (W - ml - mr) / n - 1) : 0
   return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
     <text x="14" y="${(H - mb + mt) / 2}" transform="rotate(-90 14 ${(H - mb + mt) / 2})" text-anchor="middle" font-size="11.5" fill="#5a606a">${titreY}</text>
     ${axesY(min, max, y, ml, W - mr, suffixe)}
     ${debutsMois.map((i) => `<line x1="${x(i)}" x2="${x(i)}" y1="${mt}" y2="${H - mb}" stroke="#f3f4f6"/>`).join('')}
     ${calendrier ? calendrierSvg(debutNum, nCal, x, mt, H - mb) : ''}
-    ${barres ? barres.valeurs.map((v, i) => (v ? `<rect x="${x(i) - lb / 2}" y="${y(v)}" width="${lb}" height="${y(0) - y(v)}" fill="${barres.couleur}" fill-opacity="0.35"/>` : '')).join('') : ''}
+    ${barres ? (lb >= 2.5 ? barres.valeurs.map((v, i) => (v ? `<rect x="${x(i) - lb / 2}" y="${y(v)}" width="${lb}" height="${y(0) - y(v)}" fill="${barres.couleur}" fill-opacity="0.45"/>` : '')).join('')
+      // trop de jours pour des barres lisibles : courbe pleine (aire) et trait de la même couleur
+      : `<path d="${chemin(barres.valeurs)}L${x(n - 1).toFixed(1)},${y(0).toFixed(1)}L${x(0).toFixed(1)},${y(0).toFixed(1)}Z" fill="${barres.couleur}" fill-opacity="0.18" stroke="none"/><path d="${chemin(barres.valeurs)}" fill="none" stroke="${barres.couleur}" stroke-width="1.2" stroke-opacity="0.85"/>`) : ''}
     ${bandes.map((b) => `<path d="${zone(b.bas, b.haut)}" fill="${b.couleur}" fill-opacity="${b.opacite ?? 0.18}" stroke="none"/>`).join('')}
     ${refs.map((r) => `<line x1="${ml}" x2="${W - mr}" y1="${y(r.valeur)}" y2="${y(r.valeur)}" stroke="${r.couleur}" stroke-width="1.5" stroke-dasharray="6 4"/><text x="${W - mr - 4}" y="${y(r.valeur) - 5}" text-anchor="end" font-size="11" font-weight="600" fill="${r.couleur}">${r.nom}</text>`).join('')}
     ${series.map((s) => `<path d="${chemin(s.valeurs)}" fill="none" stroke="${s.couleur}" stroke-width="${s.epaisseur ?? 1.6}" ${s.pointille ? `stroke-dasharray="${s.pointille}"` : ''} stroke-linejoin="round"/>`).join('')}
-    ${debutsMois.filter((_, k) => k % pas === 0).map((i) => { const d = versDate(debutNum + i); return `<text x="${x(i)}" y="${H - mb + 16}" text-anchor="middle" font-size="11" fill="#5a606a">${MOIS_COURTS[+d.slice(5, 7) - 1]} ${d.slice(2, 4)}</text>` }).join('')}
+    ${debutsMois.filter((_, k) => k % pasEtiq === 0).map((i) => { const d = versDate(jourDe(i)); return `<text x="${x(i)}" y="${H - mb + 16}" text-anchor="middle" font-size="11" fill="#5a606a">${pas === 'annee' ? d.slice(0, 4) : `${MOIS_COURTS[+d.slice(5, 7) - 1]} ${d.slice(2, 4)}`}</text>` }).join('')}
     ${verticales.map((v) => `<line x1="${x(v.i)}" x2="${x(v.i)}" y1="${mt}" y2="${H - mb}" stroke="#5a606a" stroke-dasharray="2 3"/><text x="${x(v.i) - 4}" y="${mt + 11}" text-anchor="end" font-size="11" fill="#5a606a">${v.nom}</text>`).join('')}
-    <rect class="survol-zone" x="${ml}" y="${mt}" width="${Math.max(0, W - ml - mr)}" height="${Math.max(0, H - mt - mb)}" fill="transparent" data-g="${enregistrerGraphe({ debutNum, n, suffixe, ymin: min, ymax: max, mt, mb, H, series: [...(barres ? [{ nom: barres.nom, valeurs: barres.valeurs, couleur: barres.couleur }] : []), ...series.map((e) => ({ nom: e.nom, valeurs: e.valeurs, couleur: e.couleur })), ...bandes.map((b) => ({ nom: b.nom, bas: b.bas, haut: b.haut, couleur: b.couleur }))] })}" data-n="${n}" data-ml="${ml}" data-mr="${mr}" data-debut="${debutNum}"/>
+    <rect class="survol-zone" x="${ml}" y="${mt}" width="${Math.max(0, W - ml - mr)}" height="${Math.max(0, H - mt - mb)}" fill="transparent" data-g="${enregistrerGraphe({ debutNum, jours, pas, n, suffixe, ymin: min, ymax: max, mt, mb, H, series: [...(barres ? [{ nom: barres.nom, valeurs: barres.valeurs, couleur: barres.couleur }] : []), ...series.map((e) => ({ nom: e.nom, valeurs: e.valeurs, couleur: e.couleur })), ...bandes.map((b) => ({ nom: b.nom, bas: b.bas, haut: b.haut, couleur: b.couleur }))] })}" data-n="${n}" data-ml="${ml}" data-mr="${mr}" data-debut="${debutNum}"/>
     ${legendeSvg(leg, ml, H - 10, W - mr)}
   </svg>`
 }
@@ -159,8 +165,11 @@ const CAL = window.CALENDRIER_CM
 const ferieDe = (j) => CAL?.ferie(j) ?? null
 const vacancesDe = (j) => (CAL?.vacancesConnues(j) ? (CAL.vacances(j) ? 1 : 0) : null)
 // Méthode de comptage en vigueur (bouton « Calcul ») : tous les libellés de graphes la reprennent.
-const enJournee = () => cacheIndicateurs?.d?.reglages?.comptage === 'journee'
-const nomPresents = (court = false) => `${court ? 'Présents' : 'Enfants présents'} ${enJournee() ? 'dans la journée' : 'à minuit'}`
+const modeComptage = () => cacheIndicateurs?.d?.reglages?.comptage ?? 'minuit'
+const enJournee = () => modeComptage() === 'journee'
+const NOMS_COMPTAGE = { minuit: 'Recensement de minuit (nuits passées)', journee: 'Présence dans la journée (jour de sortie compris)',
+  pondere: 'Présence pondérée par le temps (heures typiques)' }
+const nomPresents = (court = false) => `${court ? 'Présents' : 'Enfants présents'} ${{ minuit: 'à minuit', journee: 'dans la journée', pondere: '(présence pondérée)' }[modeComptage()]}`
 const SERIES_CHOIX = [['presents', 'Enfants présents'], ['taux', 'Taux d’occupation (%)'], ['adm', 'Admissions / jour'], ['sor', 'Sorties / jour']]
 const JOURS_SEMAINE = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
 const jourSemaine = (j) => (new Date(j * 86400000).getUTCDay() + 6) % 7
@@ -196,7 +205,9 @@ function autocorrelationPartielle(x, kmax) {
 // Chaque rubrique (barre latérale) : { nom, ico, desc, occ (besoin de l'occupation), sections }.
 // Chaque section : { t (titre), h (hauteur du graphique), occ, rendre(c, W, H) → { html, avant, lecture, survol, options } }
 // Rappel de la méthode de comptage choisie (bouton « Calcul »), en tête des explications de l'occupation.
-const texteComptage = (c) => (c.d.reglages?.comptage === 'journee'
+const texteComptage = (c) => (c.d.reglages?.comptage === 'pondere'
+  ? `<b>Présence pondérée par le temps</b> : chaque enfant compte la fraction de chaque jour où il est là, avec des heures typiques (entrée ${nf(c.d.reglages.heures.a * 24, 1)} h, sortie ${nf(c.d.reglages.heures.b * 24, 1)} h, séjour du même jour ${nf(c.d.reglages.heures.m * 24, 1)} h) : jour d’entrée 1 − h_e/24, jours pleins 1, jour de sortie h_s/24. C’est l’occupation moyenne réelle si ces heures sont justes ; elle dépend d’elles (à demander au service).`
+  : c.d.reglages?.comptage === 'journee'
   ? '<b>Comptage journalier</b> : un enfant compte chaque jour où il est présent, jour de sortie compris (entrée ≤ jour ≤ sortie) ; une mise en observation compte 1 jour. Limite : un lit libéré le matin et réoccupé l’après-midi compte deux fois, ce qui peut surestimer le nombre de lits occupés en même temps.'
   : '<b>Recensement de minuit</b> (norme des statistiques hospitalières) : un enfant compte les nuits passées (entrée ≤ jour < sortie) ; une mise en observation (entrée et sortie le même jour) compte 0. Limite : il ne voit ni les mises en observation ni le jour de sortie, et sous-estime donc l’occupation de jour. Autre méthode : bouton « Calcul » → Comptage.')
 
@@ -208,14 +219,14 @@ const ONGLETS = [
   ] },
   { nom: 'Statistiques descriptives', ico: 'sigma', desc: 'Moyenne, médiane, quantiles, forme, normalité', sections: [
     { t: 'Variables numériques des patients', rendre: (c) => rendreTableDescriptive(c, 'p') },
-    { t: 'Variables numériques journalières', rendre: (c) => rendreTableDescriptive(c, 'j') },
+    { comptage: true, t: 'Variables numériques journalières', rendre: (c) => rendreTableDescriptive(c, 'j') },
     { t: 'Distribution d’une variable', h: 260, rendre: (c, W, H) => rendreDistribution(c, W, H) },
     { t: 'Variables qualitatives : effectifs et proportions', rendre: (c) => rendreQualitatives(c) },
     { t: 'Comparaison d’une variable entre groupes', rendre: (c, W) => rendreParGroupe(c, W) },
   ] },
   { nom: 'Corrélations et tests', ico: 'nuage', desc: 'Pearson, Spearman, Kendall, χ², régression', sections: [
     { t: 'Matrice de corrélation — patients', rendre: (c, W) => rendreMatrice(c, W, 'p') },
-    { t: 'Matrice de corrélation — variables journalières', rendre: (c, W) => rendreMatrice(c, W, 'j') },
+    { comptage: true, t: 'Matrice de corrélation — variables journalières', rendre: (c, W) => rendreMatrice(c, W, 'j') },
     { t: 'Toutes les paires de variables, classées par force du lien', rendre: (c) => rendrePaires(c) },
     { t: 'Nuage de points et droite de régression', h: 340, rendre: (c, W, H) => rendreNuage(c, W, H) },
     { t: 'Nuage de points en 3D (trois variables)', h: 480, d3: true, rendre: (c, W, H) => rendreNuage3D(c, W, H) },
@@ -246,27 +257,27 @@ const ONGLETS = [
   ] },
   { nom: 'Séries temporelles', ico: 'courbe', occ: true, desc: 'Courbes, lissages, décomposition, ACF, PACF', sections: [
     { t: 'Courbe jour par jour (options à cocher)', h: 360, occ: true, rendre: (c, W, H) => rendreCourbe(c, W, H) },
-    { t: 'Admissions jour par jour', h: 300, occ: true, rendre: (c, W, H) => rendreAdmissions(c, W, H) },
+    { sansComptage: true, t: 'Admissions jour par jour', h: 300, occ: true, rendre: (c, W, H) => rendreAdmissions(c, W, H) },
     { t: 'Décomposition : tendance, semaine, imprévus', h: 390, occ: true, rendre: (c, W, H) => rendreDecomposition(c, W, H) },
     { t: 'Autocorrélation (ACF)', h: 250, occ: true, rendre: (c, W, H) => rendreAcf(c, W, H) },
     { t: 'Autocorrélation partielle (PACF)', h: 250, occ: true, rendre: (c, W, H) => rendrePacf(c, W, H) },
     { t: 'Volatilité : écart-type mobile', h: 260, occ: true, rendre: (c, W, H) => rendreVolatilite(c, W, H) },
   ] },
   { nom: 'Modèles de prévision', ico: 'prevision', desc: 'Stationnarité, SARIMA, Holt-Winters, comparaison', sections: [
-    { t: 'Série étudiée et tests de stationnarité', rendre: (c) => rendreStationnarite(c) },
-    { t: 'Tendance, saisonnalité et dispersion (tests)', rendre: (c) => rendreTestsSerie(c) },
-    { t: 'Périodogramme : les cycles de la série', h: 310, rendre: (c, W, H) => rendrePeriodogramme(c, W, H) },
-    { t: 'Comparaison des modèles sur la période de validation', h: 320, rendre: (c, W, H) => rendreComparaison(c, W, H) },
-    { t: 'SARIMA : estimation et prévision', h: 320, rendre: (c, W, H) => rendreSarima(c, W, H) },
-    { t: 'Diagnostic des résidus du SARIMA', h: 220, rendre: (c, W, H) => rendreResidus(c, W, H) },
-    { t: 'Prévisions de tous les modèles', h: 320, rendre: (c, W, H) => rendrePrevisions(c, W, H) },
+    { comptage: true, t: 'Série étudiée et tests de stationnarité', rendre: (c) => rendreStationnarite(c) },
+    { comptage: true, t: 'Tendance, saisonnalité et dispersion (tests)', rendre: (c) => rendreTestsSerie(c) },
+    { comptage: true, t: 'Périodogramme : les cycles de la série', h: 310, rendre: (c, W, H) => rendrePeriodogramme(c, W, H) },
+    { comptage: true, t: 'Comparaison des modèles sur la période de validation', h: 320, rendre: (c, W, H) => rendreComparaison(c, W, H) },
+    { comptage: true, t: 'SARIMA : estimation et prévision', h: 320, rendre: (c, W, H) => rendreSarima(c, W, H) },
+    { comptage: true, t: 'Diagnostic des résidus du SARIMA', h: 220, rendre: (c, W, H) => rendreResidus(c, W, H) },
+    { comptage: true, t: 'Prévisions de tous les modèles', h: 320, rendre: (c, W, H) => rendrePrevisions(c, W, H) },
   ] },
   { nom: 'Flux et séjours', ico: 'flux', occ: true, desc: 'Admissions, sorties, durées de séjour', sections: [
-    { t: 'Admissions et sorties par période', h: 280, occ: true, rendre: (c) => rendreFlux(c) },
-    { t: 'Durée des séjours (en nuits)', h: 280, occ: true, rendre: (c, W, H) => rendreDurees(c, W, H) },
-    { t: 'Durée moyenne de séjour par mois', h: 260, occ: true, rendre: (c) => rendreDmsMois(c) },
-    { t: 'Durée moyenne de séjour par cause', h: 0, occ: true, rendre: (c, W) => rendreDmsGroupe(c, W, 'cause') },
-    { t: 'Durée moyenne de séjour par tranche d’âge', h: 0, occ: true, rendre: (c, W) => rendreDmsGroupe(c, W, 'age') },
+    { sansComptage: true, t: 'Admissions et sorties par période', h: 280, occ: true, rendre: (c) => rendreFlux(c) },
+    { sansComptage: true, t: 'Durée des séjours (en nuits)', h: 280, occ: true, rendre: (c, W, H) => rendreDurees(c, W, H) },
+    { sansComptage: true, t: 'Durée moyenne de séjour par mois', h: 260, occ: true, rendre: (c) => rendreDmsMois(c) },
+    { sansComptage: true, t: 'Durée moyenne de séjour par cause', h: 0, occ: true, rendre: (c, W) => rendreDmsGroupe(c, W, 'cause') },
+    { sansComptage: true, t: 'Durée moyenne de séjour par tranche d’âge', h: 0, occ: true, rendre: (c, W) => rendreDmsGroupe(c, W, 'age') },
   ] },
   { nom: 'Patients', ico: 'patient', desc: 'Âge, sexe, causes, issues, quartiers', sections: [
     { t: 'Âge et sexe des enfants', h: 260, rendre: (c) => rendreAges(c) },
@@ -1651,13 +1662,16 @@ function afficherIndicateurs() {
   $('#indLits').value = lits ?? ''
   etat.indMethode ??= {}
   const methode = { ...METHODE_DEFAUT, ...(etat.indMethode[etat.service] ?? {}) }
-  $('#indSeuil').value = String(methode.seuil); $('#indInconnues').value = methode.inconnues; $('#indCensure').value = methode.censure; $('#indComptage').value = methode.comptage ?? 'minuit'; $('#indLitsPeriodes').value = methode.capacites ?? ''
+  $('#indSeuil').value = String(methode.seuil); $('#indInconnues').value = methode.inconnues; $('#indCensure').value = methode.censure; $('#indComptage').value = methode.comptage ?? 'minuit'; $('#indHEntree').value = methode.heureEntree ?? 12; $('#indHSortie').value = methode.heureSortie ?? 11; $('#indDMeme').value = methode.dureeMemeJour ?? 8; $('#indLitsPeriodes').value = methode.capacites ?? ''
   if (typeof resumerCalcul === 'function') resumerCalcul()
   const par = document.querySelector('input[name=indPar]:checked').value
-  const d = calculerIndicateurs(lits, par, methode), st = statistiquesSaisie()
+  // « Toutes les méthodes » : les trois séries sont calculées ; chaque rubrique de l'occupation les montre l'une sous l'autre.
+  const variantes = methode.comptage === 'tous' ? ['minuit', 'journee', 'pondere'].map((k) => ({ k, nom: NOMS_COMPTAGE[k], d: calculerIndicateurs(lits, par, { ...methode, comptage: k }) })) : null
+  const d = variantes ? variantes[0].d : calculerIndicateurs(lits, par, methode), st = statistiquesSaisie()
   // Capacité affichée (repères, Erlang B, file d'attente) : celle du dernier jour calculé.
   cacheIndicateurs = { d, st, lits: d.litsJour?.length ? d.litsJour.at(-1) : lits, par, pat: donneesPatients(), brut: serieBrute() }
   cacheIndicateurs.jour = donneesJour(cacheIndicateurs)
+  cacheIndicateurs.variantes = variantes
   const avant = nbLignesMaj; nbLignesMaj = st.n; derniereMaj = new Date(); signatureIndicateurs = signatureSaisie()
   cacheIndicateurs.ajout = avant === null || serviceMaj !== etat.service ? null : st.n - avant
   serviceMaj = etat.service
@@ -1760,10 +1774,27 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && notesOuv
 // Une section : titre (+ bouton Agrandir), options, bandeau de chiffres, graphique, explication.
 function htmlSection(s, k, c, W, agrandi = false) {
   const H = agrandi && s.h ? Math.max(s.h, Math.min(560, Math.round(s.h * 1.55))) : (s.h ?? 0); c.H = H; c.W = W
-  let r; try { r = s.rendre(c, W, H) } catch (e) { console.error(e); r = { html: vide(`Calcul impossible pour cette section (${echapper(e.message)}).`), lecture: '' } }
+  const rendre1 = (cc) => { try { return s.rendre(cc, W, H) } catch (e) { console.error(e); return { html: vide(`Calcul impossible pour cette section (${echapper(e.message)}).`), lecture: '' } } }
+  // « Toutes les méthodes » : la rubrique est rendue pour chaque méthode, l'une sous l'autre, avec un titre.
+  if ((s.occ || s.comptage) && !s.sansComptage && cacheIndicateurs?.variantes && c.d === cacheIndicateurs.variantes[0].d) {
+    const dOrigine = cacheIndicateurs.d, rs = []
+    for (const v of cacheIndicateurs.variantes) {
+      cacheIndicateurs.d = v.d                               // les libellés suivent la méthode rendue
+      const cv = { ...c, d: v.d, lits: v.d.litsJour?.length ? v.d.litsJour.at(-1) : c.lits }
+      cv.jour = donneesJour(cv)
+      rs.push({ v, r: rendre1(cv) })
+    }
+    cacheIndicateurs.d = dOrigine
+    s._survol = null
+    const r0 = rs[0].r
+    return `<section class="ind-section" ${agrandi ? '' : `id="ind-s${k}"`} data-k="${k}">${agrandi ? '' : `<h5><span>${s.t}</span><button type="button" class="ind-agrandir" data-agrandir="${k}" title="Afficher en grand, avec toutes ses statistiques">${ICONE_AGRANDIR} Agrandir</button></h5>`}${r0.options ? `<div class="ind-options">${r0.options}</div>` : ''}
+      ${rs.map(({ v, r }) => `<div class="ind-variante ind-variante-${v.k}"><div class="ind-variante-titre">${v.nom}</div>${r.avant ?? ''}<div class="ind-graphe">${r.html}</div></div>`).join('')}
+      ${(etat.indLecture === false && !agrandi) || !r0.lecture ? '' : `<div class="ind-lecture"><b>Comment lire :</b> la même rubrique est montrée pour les trois méthodes de comptage. ${rs.map(({ v, r }) => r.lecture && v.k !== 'minuit' ? '' : r.lecture).join('')}</div>`}</section>`
+  }
+  const r = rendre1(c)
   s._survol = r.survol
   // Mention de la méthode de comptage (et de la capacité variable) en tête de chaque graphe de l'occupation.
-  const methodeTxt = s.occ && c.d?.reglages ? `<div class="ind-methode">${enJournee() ? 'Comptage : présence dans la journée (jour de sortie compris)' : 'Comptage : recensement de minuit (nuits passées)'}${c.d.changementsLits?.length ? ` · capacité variable : ${[c.d.litsJour?.[0], ...c.d.changementsLits.map((x) => `${x.lits} dès le ${fmtDate(versDate(x.j))}`)].join(' → ')}` : ''}</div>` : ''
+  const methodeTxt = (s.occ || s.comptage) && !s.sansComptage && c.d?.reglages ? `<div class="ind-methode">Comptage : ${NOMS_COMPTAGE[c.d.reglages.comptage] ?? ''}${c.d.changementsLits?.length ? ` · capacité variable : ${[c.d.litsJour?.[0], ...c.d.changementsLits.map((x) => `${x.lits} dès le ${fmtDate(versDate(x.j))}`)].join(' → ')}` : ''}</div>` : ''
   return `<section class="ind-section" ${agrandi ? '' : `id="ind-s${k}"`} data-k="${k}">${agrandi ? '' : `<h5><span>${s.t}</span><button type="button" class="ind-agrandir" data-agrandir="${k}" title="Afficher en grand, avec toutes ses statistiques">${ICONE_AGRANDIR} Agrandir</button></h5>`}${r.options ? `<div class="ind-options">${r.options}</div>` : ''}${r.avant ?? ''}
     ${methodeTxt}<div class="ind-graphe">${r.html}</div>${(etat.indLecture === false && !agrandi) || !r.lecture ? '' : `<div class="ind-lecture"><b>Comment lire :</b> ${r.lecture}</div>`}</section>`
 }
@@ -1823,8 +1854,10 @@ function survolCourbe(e, cible) {
   }
   if (!lignes.length) { cacherSurvol(); return }
   m.innerHTML = `<line x1="${xi}" x2="${xi}" y1="${g.mt}" y2="${g.H - g.mb}" stroke="#17181a" stroke-dasharray="3 3"/>${points.join('')}`
-  const j = g.debutNum + i
-  placerBulle(e, `<div class="t">${JOURS_SEMAINE[jourSemaine(j)]} ${fmtDate(versDate(j))}</div>${lignes.map((l) => `<div class="l">${l}</div>`).join('')}`)
+  const j = g.jours ? g.jours[i] : g.debutNum + i, dj = versDate(j)
+  const titre = g.pas === 'semaine' ? `Semaine du ${fmtDate(dj)} (moyenne)` : g.pas === 'mois' ? `${MOIS_COURTS[+dj.slice(5, 7) - 1]} ${dj.slice(0, 4)} (moyenne)`
+    : g.pas === 'annee' ? `Année ${dj.slice(0, 4)} (moyenne)` : `${JOURS_SEMAINE[jourSemaine(j)]} ${fmtDate(dj)}`
+  placerBulle(e, `<div class="t">${titre}</div>${lignes.map((l) => `<div class="l">${l}</div>`).join('')}`)
 }
 document.addEventListener('mousemove', (e) => {
   const zone = e.target.closest?.('.survol-zone')
@@ -1922,7 +1955,7 @@ function appliquerLits(e) {
 }
 $('#indLits').addEventListener('input', (e) => { clearTimeout(minuterieLits); minuterieLits = setTimeout(() => appliquerLits(e), 350) })
 $('#indLits').addEventListener('change', (e) => { clearTimeout(minuterieLits); appliquerLits(e) })
-for (const [id, cle, conv] of [['#indSeuil', 'seuil', Number], ['#indInconnues', 'inconnues', String], ['#indCensure', 'censure', String], ['#indComptage', 'comptage', String], ['#indLitsPeriodes', 'capacites', String]]) {
+for (const [id, cle, conv] of [['#indSeuil', 'seuil', Number], ['#indInconnues', 'inconnues', String], ['#indCensure', 'censure', String], ['#indComptage', 'comptage', String], ['#indLitsPeriodes', 'capacites', String], ['#indHEntree', 'heureEntree', Number], ['#indHSortie', 'heureSortie', Number], ['#indDMeme', 'dureeMemeJour', Number]]) {
   $(id).addEventListener('change', (e) => { etat.indMethode ??= {}; etat.indMethode[etat.service] = { ...(etat.indMethode[etat.service] ?? {}), [cle]: conv(e.target.value) }; sauver(); afficherIndicateurs() })
 }
 document.querySelectorAll('input[name=indPar]').forEach((r) => r.addEventListener('change', afficherIndicateurs))

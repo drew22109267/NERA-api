@@ -220,6 +220,20 @@
   .ind-section .table th { position: sticky; top: 0; z-index: 1; }
   .ind-section .table td, .ind-section .table th { padding: 6px 9px; }
   .ind-section .table td.num { white-space: nowrap; }
+  .ind-variante { border-top: 1px solid var(--line); padding-top: 10px; margin-top: 10px; }
+  .ind-variante:first-of-type { border-top: 0; margin-top: 0; padding-top: 0; }
+  .ind-variante-titre { font-size: 12.5px; font-weight: 700; margin-bottom: 6px; }
+  .ind-variante-minuit .ind-variante-titre { color: var(--brand); }
+  .ind-variante-journee .ind-variante-titre { color: #e07b00; }
+  .ind-variante-pondere .ind-variante-titre { color: #7b3fe4; }
+  .ind-temps { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 8px; font-size: 12px; }
+  .ind-temps-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  .ind-temps-seg button, .ind-temps-anim { border: 0; background: var(--surface); padding: 3px 9px; font: inherit; cursor: pointer; color: var(--ink); }
+  .ind-temps-seg button + button { border-left: 1px solid var(--line); }
+  .ind-temps-seg button.actif, .ind-temps-anim.actif { background: var(--noir); color: #fff; }
+  .ind-temps-anim { border: 1px solid var(--line); border-radius: 6px; }
+  .ind-temps-periode { color: var(--muted); }
+  .ind-graphe .survol-zone { cursor: grab; }
   .ind-methode { font-size: 11.5px; color: var(--muted); margin: 0 0 6px; }
   .ind-lecture { margin-top: 8px; padding: 9px 12px; border-radius: 5px; background: var(--surface-2); font-size: 12.8px; line-height: 1.5; }
   .ind-options { display: flex; align-items: center; gap: 4px 14px; flex-wrap: wrap; margin-bottom: 8px; font-size: 12.5px; }
@@ -563,7 +577,11 @@
             <label class="ind-champ" title="Un enfant sans sortie est compté « encore hospitalisé » jusqu'à la fin de la saisie s'il est entré depuis moins de…">Encore hospitalisé si entré depuis &lt;
               <select id="indCensure" class="input"><option value="fixe">30 jours</option><option value="p95">p95 des séjours</option></select></label>
             <label class="ind-champ" title="Recensement de minuit : un enfant compte les nuits passées (entrée ≤ jour < sortie), norme des statistiques hospitalières. Comptage journalier : il compte chaque jour où il est présent, jour de sortie compris (entrée ≤ jour ≤ sortie) ; une mise en observation compte alors 1 jour.">Comptage
-              <select id="indComptage" class="input"><option value="minuit">recensement de minuit</option><option value="journee">présence dans la journée</option></select></label>
+              <select id="indComptage" class="input"><option value="minuit">recensement de minuit</option><option value="journee">présence dans la journée</option><option value="pondere">pondérée par le temps</option><option value="tous">toutes les méthodes</option></select></label>
+            <label class="ind-champ" title="Comptage pondéré : heure moyenne d'admission, heure moyenne de sortie, durée d'un séjour entré et sorti le même jour (MEO, SCAM). Le registre ne donne pas les heures : ce sont des heures typiques, à demander au service.">Heures (pondéré)
+              <span style="display:inline-flex;gap:4px"><input id="indHEntree" class="input" type="number" min="0" max="24" step="0.5" style="width:52px" title="heure moyenne d'entrée">
+              <input id="indHSortie" class="input" type="number" min="0" max="24" step="0.5" style="width:52px" title="heure moyenne de sortie">
+              <input id="indDMeme" class="input" type="number" min="0" max="24" step="0.5" style="width:52px" title="durée (h) d'un séjour du même jour"></span></label>
           </div>
         </div>
         <div class="ind-pop-zone">
@@ -2020,12 +2038,14 @@ const MAX_NUITS = 90                 // au-delà : erreur d'écriture, durée tr
 //              de même prix, sinon de même issue : nera/imputation.py) ;
 //   censure    'fixe' (NERA, 30 jours) ou 'p95' : sans sortie, « encore hospitalisé » seulement si admis depuis moins
 //              de p95 nuits (95 % des séjours sont plus courts) ; au-delà, l'enfant est presque sûrement sorti.
-const METHODE_DEFAUT = { seuil: 0.9, inconnues: 'exclure', censure: 'fixe', comptage: 'minuit' }
+const METHODE_DEFAUT = { seuil: 0.9, inconnues: 'exclure', censure: 'fixe', comptage: 'minuit', heureEntree: 12, heureSortie: 11, dureeMemeJour: 8 }
 // Une date suivie d'un « ? » (doute à la transcription) reste utilisable pour les calculs.
 const lireDateSouple = (v) => lireDate(String(v ?? '').replace(/\s*\?+\s*$/, '').trim())
 function calculerIndicateurs(lits, par, methode = METHODE_DEFAUT) {
   const lireDate = lireDateSouple
-  const { seuil, inconnues, censure, comptage, capacites } = { ...METHODE_DEFAUT, ...methode }
+  const opt = { ...METHODE_DEFAUT, ...methode }
+  const { seuil, inconnues, censure, capacites, heureEntree, heureSortie, dureeMemeJour } = opt
+  const comptage = opt.comptage === 'tous' ? 'minuit' : opt.comptage     // « toutes les méthodes » : minuit en premier
   // Comptage : « minuit » → présent les jours entrée ≤ d < sortie (nuits) ; « journee » → entrée ≤ d ≤ sortie
   // (chaque jour de présence, jour de sortie compris). Toutes les fins de séjour sont décalées d'un jour.
   const decal = comptage === 'journee' ? 1 : 0
@@ -2169,12 +2189,23 @@ function calculerIndicateurs(lits, par, methode = METHODE_DEFAUT) {
   // Recensement de minuit : +1 à l'entrée, −poids à chaque fin possible ; ce qui précède le début est cumulé au départ.
   const n = fin - debut + 1, adm = new Array(n).fill(0)
   for (const x of exploitables) { const e = x.entree - debut; if (e >= 0 && e < n) adm[e]++ }
-  const recenser = (liste) => {
-    const delta = new Array(n).fill(0); let avant = 0
-    for (const x of exploitables) { const e = x.entree - debut; if (e < 0) avant += 1; else if (e < n) delta[e] += 1 }
-    for (const f of liste) { const o = f.jour + decal - debut; if (o < 0) avant -= f.poids; else if (o < n) delta[o] -= f.poids }
+  // mode : 'minuit' (entrée ≤ d < sortie), 'journee' (entrée ≤ d ≤ sortie) ou 'pondere' : comptage journalier
+  // dont on retire la part du jour d'entrée avant l'arrivée (h_e/24) et la part du jour de sortie après le départ
+  // (1 − h_s/24) ; un séjour du même jour ne garde que sa durée m (1 − a − (1 − m − a) = m).
+  const hp = { a: (heureEntree ?? 12) / 24, b: (heureSortie ?? 11) / 24, m: (dureeMemeJour ?? 8) / 24 }
+  const recenser = (liste, mode = comptage) => {
+    const dj = mode === 'minuit' ? 0 : 1
+    const delta = new Array(n).fill(0), corr = new Array(n).fill(0); let avant = 0
+    for (const x of exploitables) {
+      const e = x.entree - debut; if (e < 0) avant += 1; else if (e < n) { delta[e] += 1; if (mode === 'pondere') corr[e] += hp.a }
+    }
+    for (const f of liste) {
+      const o = f.jour + dj - debut; if (o < 0) avant -= f.poids; else if (o < n) delta[o] -= f.poids
+      const s = f.jour - debut
+      if (mode === 'pondere' && f.jour < extraction && s >= 0 && s < n) corr[s] += f.poids * (f.jour === f.x.entree ? 1 - hp.m - hp.a : 1 - hp.b)
+    }
     const res = []; let c = avant
-    for (let i = 0; i < n; i++) { c += delta[i]; res.push(Math.round(c * 1e10) / 1e10) }
+    for (let i = 0; i < n; i++) { c += delta[i]; res.push(Math.round((c - corr[i]) * 1e10) / 1e10) }
     return res
   }
   // Capacité jour par jour : « Lits du service » au départ, puis chaque changement « jj/mm/aa=lits » à partir de
@@ -2185,6 +2216,11 @@ function calculerIndicateurs(lits, par, methode = METHODE_DEFAUT) {
   const litsJour = lits ? Array.from({ length: n }, (_, i) => changements.filter((x) => x.j <= debut + i).at(-1)?.lits ?? lits) : null
   const finsAttendues = fins((x) => x.p)
   const presents = recenser(finsAttendues), bas = recenser(fins(() => 1, 'bas')), haut = recenser(fins(() => 0, 'haut'))
+  // Plus grand nombre d'enfants présents en même temps dans la journée : encadrement exact, sans hypothèse
+  // d'heure : max(minuit de d − 1, minuit de d) ≤ pic ≤ comptage journalier de d.
+  const minuitSerie = comptage === 'minuit' ? presents : recenser(finsAttendues, 'minuit')
+  const picBas = minuitSerie.map((v, i) => Math.max(v, i ? minuitSerie[i - 1] : v))
+  const picHaut = comptage === 'journee' ? presents : recenser(finsAttendues, 'journee')
   const termines = finsAttendues.filter((f) => f.reelle && f.jour > debut && f.jour <= fin + 1)
   // Regroupement des indicateurs : jour, semaine (commençant le lundi), mois ou année.
   const cle = (j) => (par === 'annee' ? versDate(j).slice(0, 4) : par === 'jour' ? versDate(j) : par === 'semaine' ? `S${versDate(j - ((new Date(j * 86400000).getUTCDay() + 6) % 7))}` : moisDe(j))
@@ -2200,7 +2236,7 @@ function calculerIndicateurs(lits, par, methode = METHODE_DEFAUT) {
       sur: lits ? idx.filter((i) => presents[i] > litsJour[i]).length : 0, lits: lits && J ? arr(capa / J, 1) : null,
       dms: ns ? arr(sorties.reduce((a, f) => a + f.poids * (f.jour - f.x.entree), 0) / ns, 2) : null,
       // Durée qui correspond au comptage (loi de Little L = λW) : nuits au recensement de minuit, nuits + 1 en journée.
-      wComptage: ns ? arr(sorties.reduce((a, f) => a + f.poids * (f.jour - f.x.entree + decal), 0) / ns, 2) : null,
+      wComptage: ns ? arr(sorties.reduce((a, f) => a + f.poids * (comptage === 'pondere' ? (f.jour === f.x.entree ? hp.m : f.jour - f.x.entree + hp.b - hp.a) : f.jour - f.x.entree + decal), 0) / ns, 2) : null,
       rot: lits ? arr(ns / (capa / J), 2) : null, inter: lits && ns ? arr((capa - JH) / ns, 2) : null,
       dc: arr(dc, 2), mort: ns ? arr(100 * dc / ns, 2) : null }
   }
@@ -2213,12 +2249,12 @@ function calculerIndicateurs(lits, par, methode = METHODE_DEFAUT) {
     pendantRodage: exploitables.filter((x) => x.statut !== 'imputee' && x.sortie !== null && x.sortie <= debut).length,
     encoreHospitalises: exploitables.filter((x) => x.sortie === null).length,
     dansPeriode: Math.round(termines.reduce((a, f) => a + f.poids, 0)) }
-  reglages.comptage = comptage; reglages.decal = decal
+  reglages.comptage = comptage; reglages.decal = comptage === 'minuit' ? 0 : 1; reglages.heures = hp
   return { repartition, convention, statuts, reglages, debut: versDate(debut), fin: versDate(fin), premierMois: mois[i0], rodage, lignes, presents, bas, haut,
     debutNum: debut, adm, premierSaisi: versDate(premierSaisi), dernierSaisi: versDate(dernierSaisi), base: versDate(base),
     sorties: termines.map((f) => ({ jour: f.jour, poids: f.poids, nuits: f.jour - f.x.entree, l: f.x.l })),
     // Tous les séjours (pour la simulation de Monte-Carlo et l'analyse de survie) et la fin de l'observation.
-    sejours, extraction, litsJour, changementsLits: changements }
+    sejours, extraction, litsJour, changementsLits: changements, picBas, picHaut }
 }
 
 // ── Statistiques descriptives de la saisie (toutes les lignes de la période saisie) ──────────
@@ -2328,7 +2364,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document
 // Résumé lisible des réglages sur le bouton (« 20 lits · ≥ 70 % · estimée · p95 »)
 function resumerCalcul() {
   const lits = $('#indLits').value, inc = { exclure: 'exclue', estimee: 'estimée', mediane: 'médiane' }[$('#indInconnues').value], cen = $('#indCensure').value === 'p95' ? 'p95' : '30 j'
-  const cpt = $('#indComptage').value === 'journee' ? 'journée' : 'minuit'
+  const cpt = { minuit: 'minuit', journee: 'journée', pondere: 'pondéré', tous: 'toutes méthodes' }[$('#indComptage').value]
   const chg = ($('#indLitsPeriodes').value.match(/=\s*(\d+)/g) ?? []).map((x) => x.replace(/\D/g, ''))
   $('#resumeCalcul').textContent = `${lits ? `${[lits, ...chg].join('→')} lits` : 'lits ?'} · ≥ ${Math.round(100 * +$('#indSeuil').value)} % · ${inc} · ${cen} · ${cpt}`
   $('#indParChoix').value = document.querySelector('input[name=indPar]:checked').value
@@ -2373,7 +2409,8 @@ else { construireFormulaire(); majSuggestions(); majListePhotos(); sauver(); nou
 </script>
 <script src="calendrier.js?v=1"></script>
 <script src="statistiques.js?v=12"></script>
-<script src="indicateurs.js?v=54"></script>
-<script src="occupation-validation.js?v=6"></script>
+<script src="indicateurs.js?v=56"></script>
+<script src="occupation-validation.js?v=8"></script>
+<script src="temps.js?v=1"></script>
 </body>
 </html>

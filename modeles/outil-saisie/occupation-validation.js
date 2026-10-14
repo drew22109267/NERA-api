@@ -58,6 +58,19 @@
     }
     // P(t) = P(t − 1) + entrées(t) − sorties(t), en partant de l'effectif du premier jour.
     const P = [d.presents[0]]; for (let i = 1; i < n; i++) P.push(P[i - 1] + A[i] - S[i])
+    // Présence pondérée : le stock est celui du comptage journalier, dont on retire chaque jour la part du jour
+    // d'entrée avant l'arrivée et celle du jour de sortie après le départ (mêmes heures typiques que le calcul).
+    if (d.reglages?.comptage === 'pondere') {
+      const { a, b, m } = d.reglages.heures, corr = new Array(n).fill(0)
+      for (const s of sejoursExploitables(d)) {
+        const i = s.entree - deb; if (i >= 0 && i < n) corr[i] += a
+        const fins = s.sortie === null ? [] : s.statut === 'calculee' && s.basse < s.sortie ? [[s.basse, s.p], [s.sortie, 1 - s.p]] : [[s.sortie, 1]]
+        for (const [j, w] of fins) { const k = j - deb; if (k >= 0 && k < n && j < d.extraction && w > 0) corr[k] += w * (j === s.entree ? 1 - m - a : 1 - b) }
+      }
+      // le premier jour sert de point de départ : on garde la même base que le calcul principal
+      const base = P[0] - corr[0] - d.presents[0]
+      for (let i = 0; i < n; i++) P[i] = P[i] - corr[i] - base
+    }
     const ecartMax = Math.max(...P.map((v, i) => Math.abs(v - d.presents[i])))
     // Recalage : chaque comptage réel corrige le stock à partir de sa date (les flux, eux, ne changent pas).
     const comptes = lireComptages(c.opts.comptages).filter((k) => k.jour >= deb && k.jour < deb + n).sort((a, b) => a.jour - b.jour)
@@ -79,7 +92,7 @@
   let cacheMC = null
   function simulerMC(c, N) {
     const d = c.d, deb = d.debutNum, n = d.presents.length, fin = deb + n - 1, lits = c.lits
-    const cle = `${deb}|${n}|${d.sejours?.length}|${lits}|${N}|${d.presents.reduce((a, b) => a + b, 0)}|${d.reglages?.decal ?? 0}|${(d.litsJour ?? []).join(',')}`; if (cacheMC?.cle === cle) return cacheMC
+    const cle = `${deb}|${n}|${d.sejours?.length}|${lits}|${N}|${d.presents.reduce((a, b) => a + b, 0)}|${d.reglages?.comptage}|${JSON.stringify(d.reglages?.heures ?? '')}|${(d.litsJour ?? []).join(',')}`; if (cacheMC?.cle === cle) return cacheMC
     const tous = d.sejours ?? [], connus = tous.filter((s) => s.statut === 'observee' || s.statut === 'calculee')
     // Banques de durées connues (en nuits), par prix puis par issue (au moins 5 séjours), sinon tout le service.
     const banque = (cle2) => { const g = {}; for (const s of connus) { const k = cle2(s.l); if (k !== null) (g[k] ??= []).push(s.sortie - s.entree) } return Object.fromEntries(Object.entries(g).filter(([, v]) => v.length >= 5)) }
@@ -89,14 +102,21 @@
     for (let r = 0; r < N; r++) {
       const diff = new Float64Array(n + 1)
       const dc = d.reglages?.decal ?? 0
-      const ajouter = (e, sortie) => { const a = Math.max(e, deb), b = Math.min((sortie === null ? fin + 1 : sortie + dc) - 1, fin); if (b >= a) { diff[a - deb] += 1; diff[b - deb + 1] -= 1 } }
+      const pond = d.reglages?.comptage === 'pondere' ? d.reglages.heures : null, corr = pond ? new Float64Array(n) : null
+      const ajouter = (e, sortie) => {
+        const a = Math.max(e, deb), b = Math.min((sortie === null ? fin + 1 : sortie + dc) - 1, fin); if (b >= a) { diff[a - deb] += 1; diff[b - deb + 1] -= 1 }
+        if (pond) {                                         // présence pondérée : parts de journée (heures typiques)
+          if (e >= deb && e <= fin) corr[e - deb] += pond.a
+          if (sortie !== null && sortie >= deb && sortie <= fin) corr[sortie - deb] += sortie === e ? 1 - pond.m - pond.a : 1 - pond.b
+        }
+      }
       for (const s of tous) {
         if (s.statut === 'observee') ajouter(s.entree, s.sortie)
         else if (s.statut === 'calculee') ajouter(s.entree, s.basse < s.sortie && rnd() < s.p ? s.basse : s.sortie)
         else if (s.statut === 'censuree') ajouter(s.entree, null)
       }
       for (const { s, b } of incertains) ajouter(s.entree, s.entree + b[Math.floor(rnd() * b.length)])
-      const p = new Float64Array(n); let cum = 0; for (let i = 0; i < n; i++) { cum += diff[i]; p[i] = cum }
+      const p = new Float64Array(n); let cum = 0; for (let i = 0; i < n; i++) { cum += diff[i]; p[i] = cum - (corr ? corr[i] : 0) }
       series.push(p); moyennes.push(p.reduce((a, v) => a + v, 0) / n); maxi.push(Math.max(...p)); sur.push(lits ? p.filter((v, i) => v > (d.litsJour?.[i] ?? lits)).length : 0)
     }
     const qJour = (q) => Array.from({ length: n }, (_, i) => quantileTrie(series.map((p) => p[i]).sort((a, b) => a - b), q))
@@ -195,12 +215,33 @@
       lecture: `si les enfants arrivaient <b>au hasard</b> (taux λ constant) et restaient chacun une durée quelconque de moyenne W, sans limite de lits, le nombre de présents suivrait une <b>loi de Poisson</b> de moyenne <b>λ·W</b> (modèle de file M/G/∞) : c’est la loi de Little appliquée non plus à la moyenne mais à <b>toute la distribution</b>. Pour une loi de Poisson, variance = moyenne (indice de dispersion = 1). Un indice nettement supérieur à 1 (ici ${nf(v / m, 2)}) veut dire que l’occupation varie <b>plus que le hasard</b> : les arrivées viennent par vagues. Le <b>mélange de Poisson mois par mois</b> (chaque mois avec sa propre moyenne) teste si la <b>saisonnalité</b> suffit à expliquer cet excès ; s’il colle aux barres observées, oui. La <b>binomiale négative</b> est la loi classique des comptages sur-dispersés. Le tableau donne la probabilité, selon chaque loi, d’atteindre un service tendu ou en sureffectif : la loi de Poisson simple <b>sous-estime</b> ces risques quand l’indice dépasse 1. <b>Pour le SVR</b> : c’est l’argument pour un modèle qui suit la saison et vise un quantile élevé (τ = 0,8) plutôt que la moyenne.` }
   }
 
+  // ── 5. Pic de la journée : encadrement exact ────────────────────────────────────────────
+  function rendrePic(c, W, H) {
+    const d = c.d, bas = d.picBas, haut = d.picHaut
+    if (!bas?.length) return { html: vide('Pic non calculé.') }
+    const n = bas.length, moy = (t) => t.reduce((a, b) => a + b, 0) / n, L = (i) => d.litsJour?.[i] ?? c.lits
+    const depasse = (t) => (c.lits ? t.filter((v, i) => v > L(i)).length : null)
+    const minuit = bas.map((_, i) => i)                        // indices (pour les repères)
+    return {
+      avant: bandeauStats([['Pic moyen de la journée', `entre ${nf(moy(bas), 1)} et ${nf(moy(haut), 1)} enfants`],
+        ['Plus haut pic', `entre ${nf(Math.max(...bas), 0)} et ${nf(Math.max(...haut), 0)}`],
+        ...(c.lits ? [['Jours où le pic dépasse les lits', `au moins ${depasse(bas)}, au plus ${depasse(haut)}`],
+          ['Pic moyen rapporté aux lits', `${nf(100 * moy(bas.map((v, i) => v / L(i))), 0)} % à ${nf(100 * moy(haut.map((v, i) => v / L(i))), 0)} %`]] : [])]),
+      html: lignesSvg({ W, H, debutNum: d.debutNum, titreY: 'Enfants présents en même temps',
+        bandes: [{ nom: 'Pic de la journée (entre les deux bornes)', bas, haut, couleur: COUL.cyan, opacite: 0.28 }],
+        series: [{ nom: 'Borne basse : max des deux minuits', valeurs: bas, couleur: COUL.bleu, epaisseur: 1.4 },
+          { nom: 'Borne haute : présents dans la journée', valeurs: haut, couleur: COUL.orange, epaisseur: 1.2 }],
+        refs: c.lits ? [{ nom: `${c.lits} lits`, valeur: c.lits, couleur: COUL.rouge }] : [] }),
+      lecture: `le registre ne donne pas les heures : on ne connaît pas le nombre exact d’enfants présents <b>au moment le plus chargé</b> de la journée, mais on l’<b>encadre exactement</b>, sans aucune hypothèse. Borne basse : le minuit qui ouvre la journée et celui qui la ferme sont deux moments de cette journée, donc le pic est au moins égal au plus grand des deux. Borne haute : tous les enfants présents à un moment de la journée (comptage journalier) ; le pic ne peut pas dépasser ce nombre. Le vrai pic est dans la <b>bande bleu clair</b>. C’est la grandeur qui dit <b>combien de lits il faut</b> : un service peut avoir une occupation moyenne modeste et des pics qui dépassent sa capacité. Les jours où même la borne basse dépasse les lits sont des sureffectifs <b>certains</b> ; ceux où seule la borne haute dépasse sont des sureffectifs <b>possibles</b>.` }
+  }
+
   const occ = ONGLETS.find((o) => o.nom === 'Occupation')
   occ.sections.push(
+    { t: 'Pic de la journée : plus grand nombre d’enfants présents en même temps', h: 320, occ: true, sansComptage: true, rendre: (c, W, H) => rendrePic(c, W, H) },
     { t: 'Bilan des flux (entrées − sorties) et recalage sur des comptages réels', h: 320, occ: true, rendre: (c, W, H) => rendreBilanFlux(c, W, H) },
     { t: 'Simulation de Monte-Carlo : incertitude de l’occupation', h: 320, occ: true, rendre: (c, W, H) => rendreMonteCarlo(c, W, H) },
     { t: 'Analyse de survie : durée de séjour (Kaplan-Meier, log-rank)', h: 320, occ: true, rendre: (c, W, H) => rendreSurvie(c, W, H) },
     { t: 'Modèle de file M/G/∞ : loi du nombre d’enfants présents', h: 300, occ: true, rendre: (c, W, H) => rendreFileMGinf(c, W, H) },
   )
-  occ.desc = 'Taux, pics, flux, Monte-Carlo, survie, file d’attente'
+  occ.desc = 'Taux, pic de la journée, flux, Monte-Carlo, survie, file d’attente'
 })()
