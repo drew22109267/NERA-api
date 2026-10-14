@@ -33,6 +33,21 @@ from svr.recherche import Dimension, essaim_particulaire, recherche_grille
 from svr.validation import evaluer, origines_glissantes
 
 
+COMPTAGES = ("minuit", "journee")
+
+
+def etiquette(service: str, comptage: str = "minuit") -> str:
+    """Nom des fichiers d'un service selon la méthode de comptage : « PED » (minuit) ou « PED_journee »."""
+    return service if comptage == "minuit" else f"{service}_{comptage}"
+
+
+def option_comptage(parser) -> None:
+    """Option commune à tous les scripts du modèle (voir nera.occupation.reconstituer_occupation)."""
+    parser.add_argument("--comptage", choices=COMPTAGES, default="minuit",
+                        help="série utilisée : minuit (nuits passées, défaut) ou journee (jour de sortie compris) ; "
+                             "lancer d'abord rapport_occupation.py avec la même option")
+
+
 def lire_occupation(service: str, scenario: str = "attendue") -> pd.DataFrame:
     """Série produite par rapport_occupation.py : « attendue » (référence), ou une borne « basse » / « haute »."""
     nom = f"occupation_{service}.csv" if scenario == "attendue" else f"occupation_{service}_{scenario}.csv"
@@ -124,7 +139,9 @@ def main() -> None:
     p.add_argument("--recherche", choices=["aucune", "grille", "pso"], default="aucune")
     p.add_argument("--scenario", choices=["attendue", "basse", "haute"], default="attendue",
                    help="série d'occupation : attendue (référence) ou une borne de la convention des jours")
+    option_comptage(p)
     a = p.parse_args()
+    a.service = etiquette(a.service, a.comptage)
 
     occ = lire_occupation(a.service, a.scenario)
     # Les résultats d'une borne sont écrits à part : seuls ceux du scénario « attendue » sont relus

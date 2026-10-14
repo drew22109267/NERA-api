@@ -35,7 +35,7 @@ from pathlib import Path
 import pandas as pd
 import torch
 
-from lancer_niveaux import empiler_sequentiel, mesures, point
+from lancer_niveaux import empiler_sequentiel, etiquette, mesures, option_comptage, point
 from nera.chargement import lire_export, periode_exploitable, preparer_sejours
 from nera.occupation import reconstituer_occupation
 from nera.verrou import DATE_VERROU
@@ -71,18 +71,20 @@ def main() -> None:
     p.add_argument("--reentrainement", choices=["mensuel", "aucun"], default="mensuel",
                    help="mensuel : réentraîner au début de chaque mois du coffre ; aucun : un seul entraînement")
     p.add_argument("--debut-validation", help="début de la validation glissante utilisée pour l'empilement")
+    option_comptage(p)
     a = p.parse_args()
+    nom = etiquette(a.service, a.comptage)
 
     df = lire_export(a.export, confirmation_coffre=a.confirmation)          # coffre ouvert (journalisé)
     sejours, _ = preparer_sejours(df, a.service, a.extraction)
     debut = periode_exploitable(sejours)["debut"]
-    occ = reconstituer_occupation(sejours, a.extraction, lits=a.lits, debut=debut)
+    occ = reconstituer_occupation(sejours, a.extraction, lits=a.lits, debut=debut, comptage=a.comptage)
     debut_val = pd.Timestamp(a.debut_validation) if a.debut_validation else DATE_VERROU - pd.DateOffset(months=6)
     sortie, tests = Path("resultats"), []
 
     for h in a.horizons:
         print(f"══ Horizon J+{h} — test sur le coffre (origines à partir du {DATE_VERROU:%d/%m/%Y})")
-        hp = hyperparametres(sortie / f"hyperparametres_{a.service}_h{h}.json")
+        hp = hyperparametres(sortie / f"hyperparametres_{nom}_h{h}.json")
         tab = construire(occ, h)
         blocs = (decoupages_test_mensuels(tab, DATE_VERROU) if a.reentrainement == "mensuel"
                  else [decoupage_final(tab, DATE_VERROU)])
@@ -117,7 +119,7 @@ def main() -> None:
         tableau = pd.DataFrame([{"niveau": n, **mesures(y, pr, hp[3].tau)} for n, pr in previsions.items()]).set_index("niveau")
         print(tableau.to_string(), "\n")
         suffixe = "" if a.reentrainement == "mensuel" else "_sans_reentrainement"
-        tableau.to_csv(sortie / f"validation_finale_{a.service}_h{h}{suffixe}.csv", sep=";", encoding="utf-8-sig")
+        tableau.to_csv(sortie / f"validation_finale_{nom}_h{h}{suffixe}.csv", sep=";", encoding="utf-8-sig")
         # Mois par mois : septembre = test à 1 mois ; octobre = deuxième mois (après réentraînement si mensuel).
         par_mois = []
         for m in sorted(set(mois)):
@@ -127,14 +129,14 @@ def main() -> None:
                          for n, pr in previsions.items()]
         par_mois = pd.DataFrame(par_mois).set_index(["mois", "niveau"])
         print(par_mois.to_string(), "\n")
-        par_mois.to_csv(sortie / f"validation_finale_{a.service}_h{h}_par_mois{suffixe}.csv", sep=";", encoding="utf-8-sig")
+        par_mois.to_csv(sortie / f"validation_finale_{nom}_h{h}_par_mois{suffixe}.csv", sep=";", encoding="utf-8-sig")
         ordre = list(previsions)
         for i, nom in enumerate(ordre[1:], start=1):
             for contre in {"0 · persistance", ordre[i - 1]} - {nom}:
                 tests.append({"horizon": h, "reentrainement": a.reentrainement, "modele_A": nom, "modele_B": contre,
                               **M.diebold_mariano(y, point(previsions[nom]), point(previsions[contre]), h=h)})
 
-    pd.DataFrame(tests).to_csv(sortie / f"validation_finale_{a.service}_tests{suffixe}.csv", sep=";", encoding="utf-8-sig", index=False)
+    pd.DataFrame(tests).to_csv(sortie / f"validation_finale_{nom}_tests{suffixe}.csv", sep=";", encoding="utf-8-sig", index=False)
     print(f"Résultats écrits dans {sortie.resolve()}")
 
 

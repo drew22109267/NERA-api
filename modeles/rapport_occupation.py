@@ -46,6 +46,7 @@ from nera.doublons import reperer_reports, retirer_reports_confirmes
 from nera.garde_fous import comparer_erlang, verifier_little
 from nera.indicateurs import indicateurs_avec_fourchette
 from nera.occupation import resume_occupation, trois_scenarios
+from lancer_niveaux import etiquette
 from nera.verrou import DATE_VERROU
 from svr.reproductibilite import ecrire_environnement
 
@@ -91,10 +92,11 @@ def main() -> None:
     p.add_argument("--seuil-duree", type=float, default=0.9,
                    help="part minimale de durées connues par mois pour reconstituer l'occupation (0,9)")
     a = p.parse_args()
+    nom = etiquette(a.service, a.comptage)          # « PED » ou « PED_journee » : les deux séries coexistent
 
     extraction = DATE_VERROU      # pendant le développement, on « vit » au jour du verrou
     sortie = Path("resultats"); sortie.mkdir(exist_ok=True)
-    ecrire_environnement(sortie / f"rapport_{a.service}_environnement.json", **vars(a))
+    ecrire_environnement(sortie / f"rapport_{nom}_environnement.json", **vars(a))
     lits = lire_lits(a.lits_fichier) if a.lits_fichier else a.lits
     print(f"Données lues jusqu'au {DATE_VERROU:%d/%m/%Y} (exclu) — la période de test final reste fermée.\n")
     df = lire_export(a.export)
@@ -102,7 +104,7 @@ def main() -> None:
 
     # Patients reportés (même séjour écrit deux fois) : diagnostic toujours, retrait seulement sur demande.
     reports = reperer_reports(df, a.service)
-    reports.to_csv(sortie / f"reports_{a.service}.csv", sep=";", encoding="utf-8-sig", index=False)
+    reports.to_csv(sortie / f"reports_{nom}.csv", sep=";", encoding="utf-8-sig", index=False)
     print("── Lignes « Ancien » enregistrées plus de 3 jours après l'entrée (reports possibles)")
     print("  " + (", ".join(f"{k} : {v}" for k, v in reports["classement"].value_counts().items()) or "aucune"))
     n_retires = 0
@@ -121,7 +123,7 @@ def main() -> None:
     if a.inconnues != "exclure":
         connus = sejours[sejours["statut"].isin(["observee", "calculee"])]
         validation = valider_estimation(connus)
-        validation.to_csv(sortie / f"estimation_durees_{a.service}.csv", sep=";", encoding="utf-8-sig")
+        validation.to_csv(sortie / f"estimation_durees_{nom}.csv", sep=";", encoding="utf-8-sig")
         print("── Estimation des durées inconnues : validation croisée sur les séjours connus")
         print(validation.to_string())
         print("  sources : " + ", ".join(f"{k} {v}" for k, v in sejours["nuits_source"].value_counts().items()))
@@ -146,9 +148,9 @@ def main() -> None:
                int((exploitables & (fin_sejour > periode["debut"])).sum()))]
     if not n_retires:
         etapes.pop(1)
-    pd.DataFrame(etapes, columns=["etape", "sejours"]).to_csv(sortie / f"flux_donnees_{a.service}.csv",
+    pd.DataFrame(etapes, columns=["etape", "sejours"]).to_csv(sortie / f"flux_donnees_{nom}.csv",
                                                                sep=";", encoding="utf-8-sig", index=False)
-    diagramme_flux(etapes, sortie / f"flux_donnees_{a.service}.png", f"Flux des données — {a.service}")
+    diagramme_flux(etapes, sortie / f"flux_donnees_{nom}.png", f"Flux des données — {nom}")
     print("\n── Flux des données\n" + "\n".join(f"  {e} : {n}" for e, n in etapes))
     occ = occs["attendue"]
     print("\n── Occupation — scénario attendu  [tout inclusif – tout en nuits]")
@@ -179,16 +181,16 @@ def main() -> None:
         print(tableau[["admissions", "sorties", "journees_hospitalisation", "TOM_%", "TOM_bas_%", "TOM_haut_%",
                        "occupation_max", "jours_en_sureffectif", "DMS_nuits", "rotation_lits",
                        "intervalle_rotation_jours", "mortalite_%"]].to_string())
-        tableau.to_csv(sortie / f"indicateurs_{a.service}_par_mois.csv", sep=";", encoding="utf-8-sig")
+        tableau.to_csv(sortie / f"indicateurs_{nom}_par_mois.csv", sep=";", encoding="utf-8-sig")
         indicateurs_avec_fourchette(occs, sejours, par="Y").to_csv(
-            sortie / f"indicateurs_{a.service}_par_annee.csv", sep=";", encoding="utf-8-sig")
+            sortie / f"indicateurs_{nom}_par_annee.csv", sep=";", encoding="utf-8-sig")
     else:
         print("\n(Indiquez --lits pour obtenir le taux d'occupation et les indicateurs par mois.)")
 
     complet = occ.assign(presents_basse=occs["basse"]["presents"], presents_haute=occs["haute"]["presents"])
-    complet.to_csv(sortie / f"occupation_{a.service}.csv", sep=";", encoding="utf-8-sig")
+    complet.to_csv(sortie / f"occupation_{nom}.csv", sep=";", encoding="utf-8-sig")
     for sc in ("basse", "haute"):
-        occs[sc].to_csv(sortie / f"occupation_{a.service}_{sc}.csv", sep=";", encoding="utf-8-sig")
+        occs[sc].to_csv(sortie / f"occupation_{nom}_{sc}.csv", sep=";", encoding="utf-8-sig")
 
     fig, ax = plt.subplots(figsize=(12, 4))
     ax.fill_between(occ.index, occs["basse"]["presents"], occs["haute"]["presents"], alpha=0.25, lw=0,
@@ -196,8 +198,8 @@ def main() -> None:
     ax.plot(occ.index, occ["presents"], lw=1, label="Patients présents à minuit (attendu)")
     if lits is not None:
         ax.step(occ.index, occ["lits"], where="post", color="crimson", ls="--", lw=1, label="Capacité (lits)")
-    ax.set_ylabel("Patients"); ax.set_title(f"Occupation journalière — {a.service}"); ax.legend()
-    fig.tight_layout(); fig.savefig(sortie / f"occupation_{a.service}.png", dpi=150)
+    ax.set_ylabel("Patients"); ax.set_title(f"Occupation journalière — {nom}"); ax.legend()
+    fig.tight_layout(); fig.savefig(sortie / f"occupation_{nom}.png", dpi=150)
     print(f"\nSéries et graphique écrits dans {sortie.resolve()}")
 
 

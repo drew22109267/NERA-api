@@ -43,7 +43,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from benchmark_choix import DEBUT_COMMUN, Dimension, chrono, en_markdown
-from lancer_niveaux import _Identite, lire_occupation
+from lancer_niveaux import _Identite, lire_occupation, etiquette, option_comptage
 from nera.verrou import DATE_VERROU
 from svr.caracteristiques import construire
 from svr.concurrents import HyperConcurrents, fabrique_concurrent
@@ -131,7 +131,9 @@ def main() -> None:
     p.add_argument("--pas", type=int, default=28)
     p.add_argument("--familles", nargs="+", default=list(GRILLES), choices=list(GRILLES))
     p.add_argument("--rapide", action="store_true", help="800 itérations pour les SVR, modèles concurrents allégés")
+    option_comptage(p)
     a = p.parse_args()
+    a.service = etiquette(a.service, a.comptage)
     sortie = Path("resultats"); sortie.mkdir(exist_ok=True)
     ecrire_environnement(sortie / f"parametres_{a.service}_environnement.json", **vars(a))
     occ = lire_occupation(a.service)

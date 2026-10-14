@@ -274,6 +274,12 @@ def periode_exploitable(sejours: pd.DataFrame, seuil: float = 0.9, rodage_jours:
         rodage_jours = max(14, int(connues.quantile(0.95))) if len(connues) else 30
     # Rien d'inconnu avant le tout premier mois… sauf si la saisie a commencé en cours de route.
     rodage = 0 if debut_mois == part.index[0] and not rodage_au_debut else rodage_jours
-    debut = debut_mois.to_timestamp() + pd.Timedelta(days=rodage)
+    # Point de départ du rodage : début du premier mois complet, mais jamais avant le premier jour
+    # d'ENREGISTREMENT (comme l'outil de saisie) : quelques enfants entrés les jours précédents
+    # (29-30 juin, inscrits le 1er juillet) ne doivent pas avancer le début du registre.
+    base = debut_mois.to_timestamp()
+    if "date_enregistrement" in sejours and sejours["date_enregistrement"].notna().any():
+        base = max(base, pd.Timestamp(sejours["date_enregistrement"].min()).normalize())
+    debut = base + pd.Timedelta(days=rodage)
     return {"debut": debut, "premier_mois_complet": str(debut_mois), "rodage_jours": rodage,
             "part_duree_connue_par_mois": (part * 100).round(1)}

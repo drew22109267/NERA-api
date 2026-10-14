@@ -7,7 +7,7 @@ Chaque dimension change UNE décision de prétraitement et garde toutes les autr
   P2  Fenêtre de censure      14 j · 30 j · p95 des durées connues (retenu) · 60 j
   P3  Convention des jours    attendue (nuit incertaine comptée 1 − p) (retenu) · tout inclusif · tout en nuits
   P4  Patients reportés       garder (retenu) · fusionner les reports confirmés
-  P5  Période exploitable     part de durées connues ≥ 80 % · 90 % (retenu) · 95 % · rodage compté dès le début
+  P5  Période exploitable     durées connues ≥ 80 % · 90 % (retenu, avec rodage au début) · 95 % · sans rodage au début
   P6  Fin de série            aucune coupe · 7 derniers jours retirés · p95 du délai d'inscription  (retenu)
   P7  Trous (≥ 4 jours sans admission)  gardés (retenu) · lignes d'apprentissage qui les touchent exclues
   P8  Méthode de comptage     recensement de minuit (retenu) · présence dans la journée (jour de sortie compris)
@@ -65,7 +65,7 @@ class Pretraitement:
     scenario: str = "attendue"          # attendue | basse | haute
     reports: str = "garder"             # garder | retirer
     seuil: float = 0.9                  # part minimale de durées connues (période exploitable)
-    rodage_debut: bool = False
+    rodage_debut: bool = True           # registre commencé en cours de route : enfants admis avant le 1er jour saisi
     fin: int | str = "p95"              # jours retirés en fin de série : 0, 7 ou « p95 » du délai d'inscription
     trous: str = "garder"               # garder | exclure
     comptage: str = "minuit"            # minuit | journee
@@ -84,7 +84,8 @@ DIMENSIONS = {
     "P4": ("Patients « Ancien » reportés", [("Garder toutes les lignes", dict(reports="garder")),
                                             ("Fusionner les reports confirmés", dict(reports="retirer"))]),
     "P5": ("Période exploitable", [("Durées connues ≥ 80 %", dict(seuil=0.8)), ("Durées connues ≥ 90 %", dict(seuil=0.9)),
-                                   ("Durées connues ≥ 95 %", dict(seuil=0.95)), ("≥ 90 %, rodage dès le début", dict(rodage_debut=True))]),
+                                   ("Durées connues ≥ 95 %", dict(seuil=0.95)),
+                                   ("≥ 90 %, sans rodage au début (premier mois = début réel du registre)", dict(rodage_debut=False))]),
     "P6": ("Fin de série (délai d'inscription)", [("Aucune coupe", dict(fin=0)), ("7 derniers jours retirés", dict(fin=7)),
                                                  ("p95 du délai d'inscription", dict(fin="p95"))]),
     "P7": ("Trous de saisie (≥ 4 jours sans admission)", [("Gardés tels quels", dict(trous="garder")),

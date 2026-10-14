@@ -58,7 +58,7 @@ from pathlib import Path
 import pandas as pd
 import torch
 
-from lancer_niveaux import _Identite, chercher, empiler_sequentiel, lire_occupation, point
+from lancer_niveaux import _Identite, chercher, empiler_sequentiel, lire_occupation, point, etiquette, option_comptage
 from nera.verrou import DATE_VERROU
 from svr import analyse as A
 from svr import metriques as M
@@ -187,7 +187,9 @@ def main() -> None:
                    help="dimensions à lancer (D1 … D9 et D11 par défaut ; D10 avec --recherche)")
     p.add_argument("--recherche", action="store_true", help="ajoute D10 (grille et essaim : long)")
     p.add_argument("--rapide", action="store_true", help="800 itérations au lieu de celles des hyperparamètres")
+    option_comptage(p)
     a = p.parse_args()
+    a.service = etiquette(a.service, a.comptage)
     dims = set(a.dimensions) | ({"D10"} if a.recherche else set())
 
     resultats = Path("resultats")

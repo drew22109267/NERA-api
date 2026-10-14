@@ -42,7 +42,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import torch
 
-from lancer_niveaux import lire_occupation
+from lancer_niveaux import lire_occupation, etiquette, option_comptage
 from nera.verrou import DATE_VERROU
 from svr import analyse as A
 from svr import metriques as M
@@ -78,7 +78,9 @@ def main() -> None:
     p.add_argument("--tau", type=float, default=0.8, help="quantile décisionnel (0,8)")
     p.add_argument("--rapide", action="store_true", help="moins d'itérations (figures plus vite, un peu moins précises)")
     p.add_argument("--mention", default="", help="texte ajouté sous chaque figure (ex. « DONNÉES FICTIVES »)")
+    option_comptage(p)
     a = p.parse_args()
+    a.service = etiquette(a.service, a.comptage)
 
     resultats = Path("resultats")
     dossier = resultats / f"figures_{a.service}"

@@ -43,7 +43,7 @@ from pathlib import Path
 import pandas as pd
 import torch
 
-from lancer_niveaux import _Identite, empiler_sequentiel, lire_occupation, mesures, point
+from lancer_niveaux import _Identite, empiler_sequentiel, lire_occupation, mesures, point, etiquette, option_comptage
 from nera.verrou import DATE_VERROU
 from svr import metriques as M
 from svr import references as R
@@ -71,7 +71,9 @@ def main() -> None:
     p.add_argument("--pas", type=int, default=14)
     p.add_argument("--seuil-gain", type=float, default=3.0,
                    help="écart à la persistance (points de %%) en dessous duquel un gain est jugé nul (3)")
+    option_comptage(p)
     a = p.parse_args()
+    a.service = etiquette(a.service, a.comptage)
 
     sortie = Path("resultats")
     debut_val = pd.Timestamp(a.debut_validation) if a.debut_validation else DATE_VERROU - pd.DateOffset(months=6)
