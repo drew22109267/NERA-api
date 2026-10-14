@@ -9,6 +9,20 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Les secrets ne sont jamais dans appsettings.json (fichier versionné). En développement, ils viennent
+// de appsettings.Development.json (ignoré par git, modèle : appsettings.exemple.json) ; en production,
+// des variables d'environnement ConnectionStrings__Postgres et Jwt__Key.
+var manquants = new List<string>();
+if (string.IsNullOrWhiteSpace(builder.Configuration.GetConnectionString("Postgres")))
+    manquants.Add("ConnectionStrings:Postgres (variable d'environnement ConnectionStrings__Postgres)");
+if (Encoding.UTF8.GetByteCount(builder.Configuration["Jwt:Key"] ?? "") < 32)
+    manquants.Add("Jwt:Key, au moins 32 caractères (variable d'environnement Jwt__Key)");
+if (manquants.Count > 0)
+    throw new InvalidOperationException(
+        $"Configuration incomplète pour l'environnement « {builder.Environment.EnvironmentName} » : "
+        + string.Join(" ; ", manquants)
+        + ". Copiez HopitalApi/appsettings.exemple.json en appsettings.Development.json et remplissez-le.");
+
 builder.Services.AddDbContext<AppDbContext>(o =>
     o.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
 

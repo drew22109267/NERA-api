@@ -31,6 +31,7 @@ global-packages/
 # Local ASP.NET Core configuration and secrets
 HopitalApi/appsettings.*.json
 !HopitalApi/appsettings.json
+!HopitalApi/appsettings.exemple.json
 secrets.json
 *.pfx
 *.pem

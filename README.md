@@ -22,8 +22,9 @@ Le dépôt contient deux parties :
 # 1. base de données
 createdb hopital          # ou : docker compose up -d db
 
-# 2. chaîne de connexion — adapter si besoin
-#    backend/HopitalApi/appsettings.json → ConnectionStrings:Postgres
+# 2. secrets locaux (une seule fois, voir « Configuration et secrets »)
+cp HopitalApi/appsettings.exemple.json HopitalApi/appsettings.Development.json
+#    puis remplir le mot de passe PostgreSQL, la clé JWT et le mot de passe administrateur
 
 # 3. migration initiale (une seule fois)
 cd backend/HopitalApi
@@ -42,10 +43,51 @@ Sonde de santé : `GET /api/sante`.
 Au démarrage l'application applique les migrations puis amorce les données de
 référence si les tables sont vides.
 
+## Configuration et secrets
+
+Aucun secret n'est versionné. La configuration est répartie en trois fichiers :
+
+| Fichier | Versionné | Contenu |
+| --- | --- | --- |
+| `HopitalApi/appsettings.json` | oui | réglages communs, **sans aucun secret** (chaîne de connexion et clé JWT vides) |
+| `HopitalApi/appsettings.exemple.json` | oui | modèle à copier, avec les clés à remplir |
+| `HopitalApi/appsettings.Development.json` | **non** (`.gitignore`) | les vrais secrets du poste de développement |
+
+ASP.NET Core lit `appsettings.json`, puis `appsettings.<Environnement>.json`, puis les variables
+d'environnement ; chaque source remplace la précédente. En développement (`dotnet run`,
+`lancer-api-wsl.sh`), l'environnement est `Development` : les secrets viennent donc de
+`appsettings.Development.json`.
+
+Les trois secrets :
+
+| Clé | Rôle | Variable d'environnement (production) |
+| --- | --- | --- |
+| `ConnectionStrings:Postgres` | connexion à la base, mot de passe compris | `ConnectionStrings__Postgres` |
+| `Jwt:Key` | signature des jetons de connexion ; au moins 32 caractères aléatoires | `Jwt__Key` |
+| `Seed:AdminPassword` | mot de passe du premier administrateur, utilisé seulement si aucun administrateur n'existe | `Seed__AdminPassword` |
+
+Générer une clé JWT :
+
+```bash
+python3 -c "import secrets; print(secrets.token_urlsafe(64))"
+```
+
+En production, on ne crée pas de fichier : on définit les variables d'environnement sur le
+serveur (ou dans le gestionnaire de secrets de l'hébergeur), par exemple :
+
+```bash
+export ConnectionStrings__Postgres="Host=...;Database=hopital;Username=...;Password=..."
+export Jwt__Key="<clé générée>"
+```
+
+Si la chaîne de connexion ou la clé JWT manque (ou si la clé fait moins de 32 caractères),
+l'API refuse de démarrer et indique ce qui manque. Changer la clé JWT déconnecte tous les
+utilisateurs (leurs jetons ne sont plus valides) : il suffit de se reconnecter.
+
 ## Comptes initiaux
 
-Créés au premier démarrage avec le mot de passe défini par `Seed:DemoPassword`
-(`demo1234` par défaut — **à changer avant toute mise en service**).
+Le premier administrateur est créé au premier démarrage avec l'adresse `Seed:AdminEmail` et le
+mot de passe `Seed:AdminPassword` (voir ci-dessus) — **à changer dès la première connexion**.
 
 | Rôle | Adresse |
 | --- | --- |
