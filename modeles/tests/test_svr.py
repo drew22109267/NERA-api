@@ -24,7 +24,7 @@ from svr.modeles import Entrainement, Perte, SVRLineaire, SVRNoyau, SVRNoyauComp
 from svr.noyaux import NoyauComposite, NoyauRBF, distances_carrees, rbf
 from svr.optimiseurs import Adam, DescenteGradient, Momentum
 from svr.recherche import Dimension, essaim_particulaire, recherche_grille
-from svr.validation import decoupage_final, origines_glissantes
+from svr.validation import decoupage_final, decoupages_test_mensuels, origines_glissantes
 
 T = torch.float64
 GEN = torch.Generator().manual_seed(7)
@@ -218,6 +218,24 @@ def test_validation_glissante_respecte_le_temps():
         assert tab.dates_origine[d.evaluation.numpy()].min() >= d.origine
     final = decoupage_final(tab, "2025-10-01")
     assert tab.dates_cible[final.entrainement.numpy()].max() < pd.Timestamp("2025-10-01")
+
+
+def test_test_final_mensuel_reentraine_chaque_mois():
+    tab = construire(petite_serie(), h=7)
+    blocs = decoupages_test_mensuels(tab, "2025-09-01")
+    assert [b.origine for b in blocs][:2] == [pd.Timestamp("2025-09-01"), pd.Timestamp("2025-10-01")]
+    # Premier mois : exactement le découpage final classique (rien du test n'est connu).
+    assert torch.equal(blocs[0].entrainement, decoupage_final(tab, "2025-09-01").entrainement)
+    for b in blocs:
+        debut, fin = b.origine, b.origine + pd.DateOffset(months=1)
+        assert tab.dates_cible[b.entrainement.numpy()].max() < debut                 # aucune cible future
+        o = tab.dates_origine[b.evaluation.numpy()]
+        assert o.min() >= debut and o.max() < fin                                    # un mois par bloc
+    # Le mois suivant apprend aussi sur le mois de test écoulé.
+    assert len(blocs[1].entrainement) > len(blocs[0].entrainement)
+    # Les blocs couvrent tout le test, sans recouvrement.
+    tous = torch.cat([b.evaluation for b in blocs])
+    assert len(tous) == len(set(tous.tolist())) == len(decoupage_final(tab, "2025-09-01").evaluation)
 
 
 def test_standardiseur_appris_sur_l_entrainement_seulement():

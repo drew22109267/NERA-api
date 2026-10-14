@@ -179,6 +179,19 @@ phrase de confirmation obligatoire ; chaque ouverture est inscrite dans
 `resultats/coffre_ouvertures.log`. C'est la garantie que le test final mesure ce que le modèle
 ferait sur des jours **jamais vus** pendant les choix de modélisation.
 
+**Pourquoi deux mois, et comment s'en servir.** Deux mois (environ 61 jours) représentent environ 7 %
+des 27 mois de données : c'est peu pour l'apprentissage et le minimum pour le test. Un seul mois ne
+donnerait qu'une trentaine de jours, soit quatre semaines indépendantes à l'horizon de 7 jours : le test
+de Diebold-Mariano n'aurait presque aucune puissance. Le test est donc lu de deux façons
+(`--reentrainement mensuel`, par défaut) :
+
+- **test à 1 mois** : septembre, prévu par un modèle appris jusqu'au 31 août ;
+- **test à 2 mois avec mise à jour mensuelle** : octobre est prévu après un réentraînement au 30 septembre,
+  avec septembre inclus, comme le ferait le service en réentraînant chaque mois.
+
+Les métriques sont données au total et mois par mois. Relancer avec `--reentrainement aucun` (un seul
+entraînement pour les deux mois) mesure ce que rapporte le réentraînement mensuel.
+
 ---
 
 ## 5. Mathématiques A : reconstitution de l'occupation
@@ -689,6 +702,11 @@ en courbe : lien non linéaire (argument pour un noyau RBF).
 - Enregistré avant l'entrée, ou plus de 10 jours après ; date illisible.
 - Doublons probables : même date d'entrée, même sexe, même âge, même quartier.
 - Numéros d'ordre manquants entre deux numéros d'un même mois.
+- **Contrôle sur les photos** (onglet Contrôle qualité de l'outil) : pages tirées au hasard, comparées aux
+  lignes saisies retrouvées par (mois, N° d'ordre). Taux d'erreur = cases fausses / cases vérifiées ;
+  intervalle de confiance à 95 % par bootstrap sur les pages (unité de tirage ; 2 000 rééchantillonnages
+  avec remise, percentiles 2,5 et 97,5) ; par colonne, intervalle de Wilson ; taux séparé sur les colonnes
+  de l'occupation ; lignes oubliées et en trop.
 - **Double saisie** (`qualite_saisie.py`) : accord par colonne, kappa de Cohen
   κ = (p_o − p_e) / (1 − p_e), p_o accord observé, p_e accord attendu par hasard.
 
@@ -941,6 +959,8 @@ t + h ≤ O.
   origine.
 - **Test final** : entraînement sur les lignes dont la cible précède la période verrouillée, test
   sur les lignes dont l'origine est dans la période verrouillée ; les lignes à cheval sont écartées.
+  En mode mensuel (`decoupages_test_mensuels`), un bloc par mois : le bloc du mois m est appris sur
+  toutes les lignes de cible antérieure au 1er du mois m (mois de test écoulés compris).
 
 ### 10.11 Recherche des hyperparamètres
 
@@ -1252,7 +1272,11 @@ Options : `--dimensions D1 D5`, `--pas` (28 par défaut), `--rapide`. Écrit
 ```
 
 Chaque niveau, avec ses hyperparamètres retenus, est entraîné sur tout ce qui précède le verrou,
-puis prévoit la période verrouillée.
+puis prévoit septembre ; il est réentraîné au 30 septembre (septembre inclus), puis prévoit octobre.
+Écrit `validation_finale_PED_h<h>.csv` (total), `validation_finale_PED_h<h>_par_mois.csv` (septembre seul =
+test à 1 mois, octobre) et les tests de Diebold-Mariano. Option `--reentrainement aucun` : un seul
+entraînement pour les deux mois (fichiers suffixés `_sans_reentrainement`), pour mesurer l'apport du
+réentraînement mensuel. Les deux variantes se lancent dans la même séance d'ouverture du coffre.
 
 ### Étape 6 : `modele_survie.py`, probabilités de sortie J0 / J1 / J2
 
@@ -1360,7 +1384,7 @@ un calcul échoue.
 Suite du travail, dans l'ordre :
 
 1. Terminer la saisie et corriger les données (dates incohérentes, doublons, numéros manquants),
-   puis mesurer le taux d'erreur par double saisie.
+   puis mesurer le taux d'erreur de saisie (onglet Contrôle qualité, au moins 20 pages).
 2. Valider la reconstitution : comptages réels dans le bilan des flux, intervalle de Monte-Carlo.
 3. Faire l'analyse descriptive et l'analyse de la série (sections 7 et 8) pour fixer les entrées.
 4. Exporter le dataset harmonisé, lancer les étapes 1 à 4 et le banc de comparaison.

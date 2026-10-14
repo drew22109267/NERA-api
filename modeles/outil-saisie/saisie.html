@@ -385,6 +385,36 @@
   .controle .valeur { font-weight: 700; font-size: 14px; }
   .controle.faux { border-color: var(--sev-1); background: var(--sev-1-soft); }
   .controle .lib { font-size: 12px; color: var(--muted); }
+  /* Contrôle qualité page par page */
+  #vueControle.large .colonne { width: clamp(480px, 52vw, 1000px); }
+  .cq-entete { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 8px; }
+  .cq-pages { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px; }
+  .cq-pages button { min-width: 28px; height: 24px; padding: 0 6px; font-size: 11px; border-radius: 4px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); cursor: pointer; }
+  .cq-pages button.faite { background: var(--brand); color: #fff; border-color: var(--brand); }
+  .cq-pages button.passee { text-decoration: line-through; color: var(--muted); }
+  .cq-pages button.courante { outline: 2px solid var(--noir); outline-offset: 1px; }
+  .cq-etape { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; margin: 10px 0 6px; }
+  .cq-etape .input { min-height: 32px; padding: 4px 8px; }
+  .cq-compteur { display: inline-flex; align-items: center; gap: 4px; margin-right: 14px; }
+  .cq-table-wrap { overflow: auto; max-height: 52vh; border: 1px solid var(--line); border-radius: 6px; }
+  .cq-table { border-collapse: separate; border-spacing: 0; font-size: 12px; }
+  .cq-table th, .cq-table td { border-bottom: 1px solid var(--line); border-right: 1px solid var(--line); padding: 4px 6px; white-space: nowrap; max-width: 170px; overflow: hidden; text-overflow: ellipsis; }
+  .cq-table th { position: sticky; top: 0; z-index: 1; background: var(--surface-2); font-size: 11px; font-weight: 600; color: var(--muted); text-align: left; }
+  .cq-table .num { position: sticky; left: 0; background: var(--surface-2); font-weight: 700; text-align: right; }
+  .cq-table th.num { z-index: 2; }
+  .cq-table td.cq-case { cursor: pointer; background: var(--surface); }
+  .cq-table td.cq-case:hover { background: var(--brand-soft); }
+  .cq-table td.cq-case.faux { background: var(--sev-1-soft); color: var(--sev-1-ink); font-weight: 700; box-shadow: inset 0 0 0 2px var(--sev-1); }
+  .cq-table tr.cq-double td { background: var(--sev-3-soft); }
+  .cq-table tr.cq-absent td { color: var(--muted); font-style: italic; background: var(--surface-2); }
+  .cq-chiffres { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+  .cq-chiffres > div { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--surface); display: flex; flex-direction: column; gap: 2px; }
+  .cq-chiffres span { font-size: 11.5px; color: var(--muted); }
+  .cq-chiffres b { font-size: 20px; }
+  .cq-chiffres em { font-style: normal; font-size: 11.5px; color: var(--muted); }
+  .cq-chiffres .tag { align-self: flex-start; }
+  .cq-res { font-size: 12.5px; }
+  .cq-phrase { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--surface-2); font-size: 13px; line-height: 1.55; margin-bottom: 6px; }
   .resultat { display: grid; grid-template-columns: 1fr 120px 56px; gap: 10px; align-items: center; padding: 5px 0; font-size: 13px; }
   #aide { position: fixed; inset: 0; background: rgba(16,24,40,.45); display: none; place-items: center; z-index: 50; padding: 20px; }
   #aide.visible { display: grid; }
@@ -665,8 +695,9 @@
     <div class="card-kicker">2 · Contrôle qualité — à quoi ça sert ?</div>
     <p style="font-size:13.5px">Quand on recopie des centaines de lignes à la main, on fait forcément quelques erreurs
       (un 3 lu comme un 8, une date inversée). Le contrôle qualité <b>mesure</b> ces erreurs : l’outil tire au hasard
-      une partie des lignes déjà saisies, vous les comparez à la photo, et il calcule le <b>taux d’erreur de saisie</b>
-      par colonne. Ce chiffre va dans le mémoire et prouve que votre dataset est fiable. Si une colonne a beaucoup
+      des <b>pages</b> (photos) au hasard ; pour chaque page, vous tapez le mois et les N° visibles, l’outil affiche
+      les lignes saisies à côté de la photo et vous cliquez les cases mal recopiées. Il calcule le <b>taux d’erreur de saisie</b>
+      global, par colonne et sur les colonnes qui servent à l’occupation, avec un intervalle de confiance. Ce chiffre va dans le mémoire et prouve que votre dataset est fiable. Si une colonne a beaucoup
       d’erreurs, revérifiez-la en entier.</p>
     <p class="text-muted" style="font-size:12.5px;margin:0">À faire une fois la saisie d’un service terminée (ou à mi-parcours).</p>
   </section>
@@ -1134,6 +1165,7 @@ function supprimerLigne(i) {
   etat.lignes.splice(i, 1)
   const decaler = (j) => (j > i ? j - 1 : j)
   for (const c of Object.values(etat.controles)) {
+    if (!c.ids) continue                // contrôle page par page : lignes retrouvées par (mois, N°), rien à décaler
     const position = c.ids[c.position]
     c.ids = c.ids.filter((j) => j !== i).map(decaler)
     c.faites = c.faites.filter((j) => j !== i).map(decaler)
@@ -1613,111 +1645,278 @@ $('#sauvApercu').addEventListener('click', (e) => {
 })
 
 // ── 2 · Contrôle qualité ─────────────────────────────────────
-// controle = { ids: [index des lignes tirées], position, faux: { index: [colonnes fausses] }, faites: [index vérifiés] }
+// Contrôle PAGE PAR PAGE. On tire des photos au hasard ; pour chacune, on indique le mois et les N° d'ordre
+// visibles sur la photo ; l'outil affiche à côté les lignes saisies correspondantes, on clique les cases mal
+// recopiées et on compte les lignes oubliées ou en trop. Les lignes sont retrouvées par (mois, N°) à chaque
+// affichage : rien ne dépend de leur position dans la saisie, une suppression ne décale rien.
+// controle = { v: 2, pages: [{ photo, mois, de, a, faux: { 'N°#k': [colonnes] }, oubliees, enTrop, etat }], position, vue }
+//   etat d'une page : 'a-faire' | 'faite' | 'passee' (illisible ou hors registre) ; vue : 'page' | 'resultats'
 const visionControle = creerVisionneuse($('#visionneuseControle'))
 const colonnesControlees = () => colonnes().filter((c) => c.k !== 'remarque')
-const controle = () => etat.controles[etat.service]
+// Colonnes qui servent au calcul de l'occupation : leurs erreurs comptent le plus pour le mémoire.
+const COLONNES_OCCUPATION = ['date_enregistrement', 'date_entree', 'date_sortie', 'nb_jours', 'observation', 'prix']
+const controle = () => { const c = etat.controles[etat.service]; return c?.v === 2 ? c : null }
+const numeroLigne = (l) => parseInt(String(l[registre().ordre] ?? '').replace(/\D/g, ''), 10)
+const libelleMois = (m) => (m ? `${MOIS_LONGS[+m.slice(5, 7) - 1]} ${m.slice(0, 4)}` : '?')
+const largeurControle = (large) => $('#vueControle').classList.toggle('large', large)
 
-function tirerEchantillon(pourcent) {
-  const indices = etat.lignes.map((l, i) => (l.service === etat.service ? i : -1)).filter((i) => i >= 0)
-  for (let i = indices.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [indices[i], indices[j]] = [indices[j], indices[i]] }
-  etat.controles[etat.service] = { ids: indices.slice(0, Math.max(1, Math.round(indices.length * pourcent / 100))), position: 0, faux: {}, faites: [] }
+// Lignes saisies d'une page : même mois, N° entre « de » et « a ». Clé stable « N°#k » (k-ième ligne de ce N°).
+function lignesPage(p) {
+  if (!p.mois || !Number.isFinite(p.de) || !Number.isFinite(p.a)) return []
+  const trouvees = lignesService().filter((l) => moisLigne(l) === p.mois && numeroLigne(l) >= p.de && numeroLigne(l) <= p.a)
+    .sort((x, y) => numeroLigne(x) - numeroLigne(y))
+  const vus = {}
+  return trouvees.map((l) => { const n = numeroLigne(l), k = (vus[n] = (vus[n] ?? 0) + 1); return { l, n, cle: `${n}#${k}`, double: k > 1 } })
+}
+const numerosAbsents = (p) => { const pris = new Set(lignesPage(p).map((x) => x.n)), r = []; for (let n = p.de; n <= p.a && r.length < 60; n++) if (!pris.has(n)) r.push(n); return r }
+
+// Proposition de mois et de N° pour une page : d'après les lignes déjà rattachées à cette photo, sinon rien.
+function proposerPage(p) {
+  const liees = lignesService().filter((l) => l.photo === p.photo)
+  if (!liees.length) return
+  const mois = moisLigne(liees[0]), n = liees.map(numeroLigne).filter(Number.isFinite)
+  if (mois && n.length) Object.assign(p, { mois, de: Math.min(...n), a: Math.max(...n) })
+}
+
+function tirerPages(nb, choisie = null) {
+  const noms = choisie ? [choisie] : photos.map((x) => x.nom)
+  for (let i = noms.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [noms[i], noms[j]] = [noms[j], noms[i]] }
+  const c = controle() ?? { v: 2, pages: [], position: 0, vue: 'page' }
+  const deja = new Set(c.pages.map((p) => p.photo))
+  for (const nom of noms.filter((x) => !deja.has(x)).slice(0, nb)) {
+    const p = { photo: nom, mois: '', de: NaN, a: NaN, faux: {}, oubliees: 0, enTrop: 0, etat: 'a-faire' }
+    proposerPage(p); c.pages.push(p)
+  }
+  if (choisie) c.position = c.pages.findIndex((p) => p.photo === choisie)
+  c.vue = 'page'; etat.controles[etat.service] = c
   sauver(); afficherControle()
 }
 
-function resultats() {
-  const c = controle(), faites = c.faites.filter((i) => etat.lignes[i])
-  const parColonne = colonnesControlees().map((col) => {
-    const e = faites.filter((i) => (c.faux[i] ?? []).includes(col.k)).length
-    return { colonne: col.l, erreurs: e, taux: faites.length ? 100 * e / faites.length : 0 }
+// ── Calcul des résultats ──
+// Unité tirée au hasard = la page : l'intervalle de confiance du taux global vient d'un bootstrap sur les pages
+// (on retire au hasard, avec remise, autant de pages que contrôlées, 2 000 fois), ce qui tient compte du fait
+// que les erreurs d'une même page se ressemblent (même écriture, même séance de saisie). Par colonne :
+// intervalle de Wilson sur les lignes.
+function wilson(k, n, z = 1.96) {
+  if (!n) return [NaN, NaN]
+  const p = k / n, d = 1 + z * z / n, c = p + z * z / (2 * n), m = z * Math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
+  return [Math.max(0, (c - m) / d), Math.min(1, (c + m) / d)]
+}
+function resultatsControle(c) {
+  const cols = colonnesControlees(), occ = cols.filter((x) => COLONNES_OCCUPATION.includes(x.k))
+  const pages = c.pages.filter((p) => p.etat === 'faite').map((p) => {
+    const L = lignesPage(p), fx = (x) => p.faux[x.cle] ?? []
+    return { p, lignes: L.length, cases: L.length * cols.length, erreurs: L.reduce((s, x) => s + fx(x).length, 0),
+      casesOcc: L.length * occ.length, erreursOcc: L.reduce((s, x) => s + fx(x).filter((k) => COLONNES_OCCUPATION.includes(k)).length, 0),
+      lignesFausses: L.filter((x) => fx(x).length).length, oubliees: p.oubliees || 0, enTrop: p.enTrop || 0,
+      parCol: Object.fromEntries(cols.map((col) => [col.k, L.filter((x) => fx(x).includes(col.k)).length])),
+      detail: L.flatMap((x) => fx(x).map((k) => ({ x, k }))) }
   })
-  const cases = faites.length * colonnesControlees().length
-  const total = parColonne.reduce((a, x) => a + x.erreurs, 0)
-  return { lignes: faites.length, parColonne, global: cases ? 100 * total / cases : 0, total }
+  const somme = (cle, liste = pages) => liste.reduce((s, q) => s + q[cle], 0)
+  const taux = (liste, num, den) => (somme(den, liste) ? somme(num, liste) / somme(den, liste) : NaN)
+  const lignes = somme('lignes')
+  // Bootstrap sur les pages (générateur à graine fixe : même résultat à chaque affichage).
+  let g = 20261014 >>> 0
+  const alea = () => { g = (g + 0x6d2b79f5) | 0; let t = Math.imul(g ^ (g >>> 15), 1 | g); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296 }
+  const boot = { global: [], occ: [], lignes: [] }
+  if (pages.length >= 5) for (let b = 0; b < 2000; b++) {
+    const tirage = Array.from({ length: pages.length }, () => pages[Math.floor(alea() * pages.length)])
+    boot.global.push(taux(tirage, 'erreurs', 'cases')); boot.occ.push(taux(tirage, 'erreursOcc', 'casesOcc')); boot.lignes.push(taux(tirage, 'lignesFausses', 'lignes'))
+  }
+  const ic = (v) => { const t = v.filter(Number.isFinite).sort((a, b) => a - b); return t.length ? [t[Math.floor(0.025 * (t.length - 1))], t[Math.ceil(0.975 * (t.length - 1))]] : [NaN, NaN] }
+  return {
+    pages, lignes, cases: somme('cases'), erreurs: somme('erreurs'), oubliees: somme('oubliees'), enTrop: somme('enTrop'),
+    global: taux(pages, 'erreurs', 'cases'), icGlobal: ic(boot.global),
+    occ: taux(pages, 'erreursOcc', 'casesOcc'), icOcc: ic(boot.occ), nbColsOcc: occ.length,
+    lignesFausses: taux(pages, 'lignesFausses', 'lignes'), icLignes: ic(boot.lignes),
+    parColonne: cols.map((col) => { const e = pages.reduce((s, q) => s + q.parCol[col.k], 0); return { k: col.k, colonne: col.l, erreurs: e, taux: lignes ? e / lignes : NaN, ic: wilson(e, lignes), occupation: COLONNES_OCCUPATION.includes(col.k) } }),
+    detail: pages.flatMap((q) => q.detail.map((d) => ({ ...d, p: q.p }))),
+  }
+}
+const pc = (v, k = 1) => (Number.isFinite(v) ? `${(100 * v).toFixed(k).replace('.', ',')} %` : '—')
+const verdict = (t) => (!Number.isFinite(t) ? ['', 'tag-neutral'] : t < 0.01 ? ['très bonne', 'tag-sev-4'] : t < 0.02 ? ['bonne', 'tag-sev-4'] : t < 0.05 ? ['acceptable', 'tag-sev-3'] : ['à reprendre', 'tag-sev-1'])
+
+// ── Affichage ──
+function afficherControle() {
+  const p = $('#panneauControle'), c = controle(), nbLignes = lignesService().length
+  if (!c || !c.pages.length) { largeurControle(false); visionControle.afficher(null); p.innerHTML = htmlAccueilControle(nbLignes); brancherAccueilControle(); return }
+  c.position = Math.max(0, Math.min(c.position ?? 0, c.pages.length - 1))
+  if (c.vue === 'resultats') { largeurControle(true); visionControle.afficher(null); p.innerHTML = htmlResultatsControle(c); brancherResultatsControle(c); return }
+  largeurControle(true)
+  const page = c.pages[c.position]
+  visionControle.afficher(page.photo)
+  p.innerHTML = htmlPageControle(c, page)
+  brancherPageControle(c, page)
 }
 
-function afficherControle() {
-  const p = $('#panneauControle'), c = controle()
-  const nbLignes = lignesService().length
-  if (!c) {
-    visionControle.afficher(null)
-    p.innerHTML = `
-      <div class="card-kicker">Contrôle qualité · ${echapper(registre().nom)}</div>
-      <h4>Vérifier la saisie sur un échantillon</h4>
-      <p style="font-size:13.5px">L’outil tire au hasard des lignes déjà saisies. Pour chacune, vous la comparez à la photo
-        et vous signalez les cases mal recopiées. Il en sort le <b>taux d’erreur de saisie</b>, à citer dans le mémoire.</p>
-      <ol class="etapes" style="margin:var(--space-4) 0">
-        <li><span>Choisissez la taille de l’échantillon : 10 % suffit en général.</span></li>
-        <li><span>Pour chaque ligne tirée, cliquez sur les cases <b>fausses</b> (elles deviennent rouges), puis « Ligne suivante ».</span></li>
-        <li><span>À la fin, exportez les résultats.</span></li>
-      </ol>
-      ${nbLignes ? '' : '<div class="alert warn" style="margin-bottom:var(--space-3)">Aucune ligne saisie dans ce service pour l’instant.</div>'}
-      <div class="row">
-        <label class="field" style="display:flex;align-items:center;gap:8px"><span style="margin:0">Échantillon</span>
-          <input id="pourcent" class="input" type="number" min="1" max="100" value="10" style="width:76px;min-height:38px"> %</label>
-        <button id="tirer" class="btn btn-primary" ${nbLignes ? '' : 'disabled'}>Tirer au hasard</button>
-      </div>
-      <p class="text-muted" style="font-size:12.5px;margin-top:8px">${nbLignes} ligne(s) saisie(s) dans ce service.</p>`
-    $('#tirer')?.addEventListener('click', () => tirerEchantillon(Math.min(100, Math.max(1, +$('#pourcent').value || 10))))
-    return
-  }
-
-  const r = resultats(), fini = c.faites.length >= c.ids.length
-  const i = c.ids[c.position], l = etat.lignes[i]
-  visionControle.afficher(l?.photo)
-  const fausses = c.faux[i] ?? []
-  const bilan = `
-    <div class="card-kicker" style="margin-top:var(--space-4)">Résultat · ${r.lignes} ligne(s) vérifiée(s)</div>
-    ${r.lignes ? `<p style="font-size:13.5px;margin-bottom:6px">Taux d’erreur global : <b>${r.global.toFixed(1)} %</b> des cases
-      (${r.total} case(s) fausse(s) sur ${r.lignes * colonnesControlees().length}).</p>
-      ${r.parColonne.map((x) => `<div class="resultat"><span>${echapper(x.colonne)}</span>
-        <div class="bar ${x.taux > 5 ? 'sev-1' : 'sev-4'}"><span style="width:${Math.max(x.taux, x.taux ? 3 : 0)}%"></span></div>
-        <span style="text-align:right">${x.taux.toFixed(1)} %</span></div>`).join('')}
-      <p class="text-muted" style="font-size:12.5px">Une colonne au-dessus de 5 % est à revérifier en entier.</p>`
-    : '<p class="text-muted" style="font-size:13px">Les taux apparaissent dès la première ligne vérifiée.</p>'}
-    <div class="row" style="margin-top:var(--space-3)">
-      <button id="exporterControle" class="btn btn-secondary btn-sm" ${r.lignes ? '' : 'disabled'}>Exporter les résultats</button>
-      <button id="recommencer" class="btn btn-ghost btn-sm">Nouveau tirage</button>
-    </div>`
-
-  p.innerHTML = `
+function htmlAccueilControle(nbLignes) {
+  const n = Math.min(20, photos.length || 20)
+  return `
     <div class="card-kicker">Contrôle qualité · ${echapper(registre().nom)}</div>
-    <h4>${fini ? 'Contrôle terminé' : `Ligne ${c.position + 1} sur ${c.ids.length}`}</h4>
-    <div class="bar" style="margin-bottom:var(--space-3)"><span style="width:${100 * c.faites.length / c.ids.length}%"></span></div>
-    ${!l ? '<div class="alert warn">Cette ligne a été supprimée depuis le tirage.</div>' : `
-      ${photos.some((x) => x.nom === l.photo) ? '' : `<div class="alert warn" style="margin-bottom:var(--space-3)">Photo « ${echapper(l.photo)} » non ouverte : cliquez sur « Ouvrir les photos ».</div>`}
-      <p class="text-muted" style="font-size:12.5px">Photo ${echapper(l.photo)} · ligne n° ${echapper(l[registre().ordre] || '?')}. Cliquez sur chaque case <b>mal recopiée</b>.</p>
-      <div id="cases">${colonnesControlees().map((col) => `
-        <div class="controle${fausses.includes(col.k) ? ' faux' : ''}" data-k="${col.k}" style="cursor:pointer">
-          <div><div class="lib">${echapper(col.l)}</div><div class="valeur">${echapper(l[col.k]) || '<span class="text-muted" style="font-weight:500">vide</span>'}</div></div>
-          <span class="tag ${fausses.includes(col.k) ? 'tag-sev-1' : 'tag-neutral'}">${fausses.includes(col.k) ? 'Erreur' : 'Correct'}</span>
-        </div>`).join('')}</div>`}
-    <div class="row" style="margin:var(--space-3) 0">
-      <button id="precedente" class="btn btn-secondary btn-sm" ${c.position ? '' : 'disabled'}>‹ Précédente</button>
-      <button id="valider" class="btn btn-primary btn-sm">${c.position < c.ids.length - 1 ? 'Ligne vérifiée, suivante ›' : 'Ligne vérifiée'}</button>
+    <h4>Mesurer la qualité de la saisie à partir des photos</h4>
+    <p style="font-size:13.5px">On ne peut pas relire les ${nbLignes} lignes. On en relit une <b>partie tirée au hasard</b>, page par page,
+      et on en déduit le <b>taux d’erreur de toute la saisie</b>, avec sa marge d’incertitude. C’est ce chiffre qui va dans le mémoire.</p>
+    <ol class="etapes" style="margin:var(--space-4) 0">
+      <li><span><b>Ouvrez les photos</b> du registre (menu « Ouvrir les photos », fichiers JPEG).</span></li>
+      <li><span><b>Tirez des pages au hasard</b> : 20 pages (environ 300 lignes) donnent déjà une mesure précise.</span></li>
+      <li><span>Pour chaque page : tapez le <b>mois</b> et le <b>premier et le dernier N°</b> visibles sur la photo. Les lignes saisies s’affichent à côté.</span></li>
+      <li><span>Comparez avec la photo et <b>cliquez chaque case mal recopiée</b> (elle devient rouge). Comptez les lignes <b>oubliées</b> ou <b>en trop</b>.</span></li>
+      <li><span>Ouvrez les <b>résultats</b> : taux d’erreur global, par colonne, sur les colonnes de l’occupation, liste des erreurs à corriger et phrase prête pour le mémoire.</span></li>
+    </ol>
+    ${photos.length ? `<div class="alert ok" style="margin-bottom:var(--space-3)">${photos.length} photo(s) ouverte(s).</div>`
+      : `<div class="alert warn" style="margin-bottom:var(--space-3)">Aucune photo ouverte. <button id="cqOuvrir" class="btn btn-secondary btn-sm" style="margin-left:8px">Ouvrir les photos</button></div>`}
+    ${nbLignes ? '' : '<div class="alert warn" style="margin-bottom:var(--space-3)">Aucune ligne saisie dans ce service.</div>'}
+    <div class="row" style="align-items:center">
+      <label class="field" style="display:flex;align-items:center;gap:8px;margin:0"><span style="margin:0">Pages à contrôler</span>
+        <input id="cqNb" class="input" type="number" min="1" max="${Math.max(1, photos.length)}" value="${n}" style="width:76px;min-height:38px"></label>
+      <button id="cqTirer" class="btn btn-primary" ${photos.length && nbLignes ? '' : 'disabled'}>Tirer au hasard</button>
     </div>
-    ${bilan}`
+    ${photos.length ? `<div class="row" style="align-items:center;margin-top:10px">
+      <select id="cqChoix" class="input" style="max-width:260px">${photos.map((x) => `<option>${echapper(x.nom)}</option>`).join('')}</select>
+      <button id="cqAjouter" class="btn btn-secondary btn-sm">Contrôler cette page</button></div>` : ''}
+    ${etat.controles[etat.service] && !controle() ? '<p class="text-muted" style="font-size:12.5px;margin-top:10px">Un ancien contrôle (ligne par ligne) existait : il est remplacé par ce contrôle page par page.</p>' : ''}`
+}
+function brancherAccueilControle() {
+  $('#cqOuvrir')?.addEventListener('click', () => $('#fichiersPhotos').click())
+  $('#cqTirer')?.addEventListener('click', () => tirerPages(Math.max(1, +$('#cqNb').value || 20)))
+  $('#cqAjouter')?.addEventListener('click', () => tirerPages(1, $('#cqChoix').value))
+}
 
-  $('#cases')?.addEventListener('click', (e) => {
-    const d = e.target.closest('[data-k]'); if (!d) return
-    const liste = c.faux[i] ?? []
-    c.faux[i] = liste.includes(d.dataset.k) ? liste.filter((k) => k !== d.dataset.k) : [...liste, d.dataset.k]
-    if (!c.faites.includes(i)) c.faites.push(i)
+function htmlPageControle(c, page) {
+  const cols = colonnesControlees(), L = lignesPage(page), absents = page.mois && Number.isFinite(page.de) ? numerosAbsents(page) : []
+  const moisDispo = [...new Set(lignesService().map(moisLigne).filter(Boolean))].sort()
+  const ouverte = photos.some((x) => x.nom === page.photo)
+  const faites = c.pages.filter((p) => p.etat === 'faite').length
+  const etiquette = (p, i) => `<button type="button" data-page="${i}" class="${p.etat === 'faite' ? 'faite' : p.etat === 'passee' ? 'passee' : ''}${i === c.position ? ' courante' : ''}" title="${echapper(p.photo)}">${i + 1}</button>`
+  const fx = (x) => page.faux[x.cle] ?? []
+  return `
+    <div class="cq-entete">
+      <div><div class="card-kicker">Contrôle qualité · page ${c.position + 1} sur ${c.pages.length} · ${faites} vérifiée(s)</div>
+        <h4 style="margin:2px 0 0">${echapper(page.photo)}</h4></div>
+      <button id="cqResultats" class="btn btn-primary btn-sm">Voir les résultats</button>
+    </div>
+    <div class="cq-pages">${c.pages.map(etiquette).join('')}</div>
+    ${ouverte ? '' : '<div class="alert warn" style="margin:8px 0">Cette photo n’est pas ouverte : utilisez « Ouvrir les photos » (même dossier).</div>'}
+    <div class="cq-etape"><b>1.</b> Lisez sur la photo le mois et les N° d’ordre de la page :
+      <select id="cqMois" class="input" style="width:auto"><option value="">mois…</option>${moisDispo.map((m) => `<option value="${m}" ${m === page.mois ? 'selected' : ''}>${libelleMois(m)}</option>`).join('')}</select>
+      N° <input id="cqDe" class="input" type="number" min="0" value="${Number.isFinite(page.de) ? page.de : ''}" style="width:70px">
+      à <input id="cqA" class="input" type="number" min="0" value="${Number.isFinite(page.a) ? page.a : ''}" style="width:70px">
+    </div>
+    ${!page.mois || !Number.isFinite(page.de) || !Number.isFinite(page.a) ? '<p class="text-muted" style="font-size:13px">Les lignes saisies de cette page s’afficheront ici.</p>' : `
+    <div class="cq-etape"><b>2.</b> Cliquez chaque case <b>différente de la photo</b> (rouge = erreur). ${L.length} ligne(s) saisie(s) pour ${libelleMois(page.mois)}, N° ${page.de} à ${page.a}.</div>
+    <div class="cq-table-wrap"><table class="cq-table"><thead><tr><th class="num">N°</th>${cols.map((col) => `<th title="${echapper(col.l)}">${echapper(col.l)}</th>`).join('')}<th>Erreurs</th></tr></thead><tbody>
+      ${L.map((x) => `<tr${x.double ? ' class="cq-double" title="Deuxième ligne avec ce N° : doublon ?"' : ''}><td class="num">${x.n}${x.double ? ' (2e)' : ''}</td>
+        ${cols.map((col) => `<td class="cq-case${fx(x).includes(col.k) ? ' faux' : ''}" data-cle="${x.cle}" data-k="${col.k}" title="${echapper(col.l)} : ${echapper(x.l[col.k]) || 'vide'}">${echapper(x.l[col.k]) || '<span class="text-muted">·</span>'}</td>`).join('')}
+        <td class="num">${fx(x).length || ''}</td></tr>`).join('')}
+      ${absents.map((n) => `<tr class="cq-absent"><td class="num">${n}</td><td colspan="${cols.length + 1}">absent de la saisie</td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="cq-etape"><b>3.</b> Lignes manquantes ou en trop :
+      <span class="cq-compteur">lignes de la photo <b>oubliées</b> dans la saisie <button class="btn btn-ghost btn-sm" data-cpt="oubliees" data-d="-1">−</button><b>${page.oubliees || 0}</b><button class="btn btn-ghost btn-sm" data-cpt="oubliees" data-d="1">+</button></span>
+      <span class="cq-compteur">lignes saisies <b>en trop</b> (pas sur la photo) <button class="btn btn-ghost btn-sm" data-cpt="enTrop" data-d="-1">−</button><b>${page.enTrop || 0}</b><button class="btn btn-ghost btn-sm" data-cpt="enTrop" data-d="1">+</button></span>
+      ${absents.length ? `<div class="text-muted" style="font-size:12.5px;margin-top:4px">N° ${absents.join(', ')} absent(s) de la saisie : s’ils sont écrits sur la photo, comptez-les comme oubliés (bouton +).</div>` : ''}
+    </div>`}
+    <div class="row" style="margin-top:var(--space-3)">
+      <button id="cqPrec" class="btn btn-secondary btn-sm" ${c.position ? '' : 'disabled'}>‹ Page précédente</button>
+      <button id="cqValider" class="btn btn-primary btn-sm" ${L.length || page.oubliees ? '' : 'disabled'}>Page vérifiée, suivante ›</button>
+      <button id="cqPasser" class="btn btn-ghost btn-sm" title="Photo illisible, page vide ou d'un autre registre : elle ne compte pas">Passer cette page</button>
+      <button id="cqRecommencer" class="btn btn-ghost btn-sm" style="margin-left:auto">Nouveau contrôle</button>
+    </div>`
+}
+function brancherPageControle(c, page) {
+  const lire = () => { page.mois = $('#cqMois').value; page.de = parseInt($('#cqDe').value, 10); page.a = parseInt($('#cqA').value, 10)
+    if (Number.isFinite(page.de) && Number.isFinite(page.a) && page.a < page.de) [page.de, page.a] = [page.a, page.de]
+    sauver(); afficherControle() }
+  ;['#cqMois', '#cqDe', '#cqA'].forEach((s) => $(s)?.addEventListener('change', lire))
+  $('#panneauControle').querySelectorAll('.cq-case').forEach((td) => td.addEventListener('click', () => {
+    const l = page.faux[td.dataset.cle] ?? [], k = td.dataset.k
+    page.faux[td.dataset.cle] = l.includes(k) ? l.filter((x) => x !== k) : [...l, k]
     sauver(); afficherControle()
-  })
-  $('#valider').onclick = () => {
-    if (!c.faites.includes(i)) c.faites.push(i)
-    c.position = Math.min(c.position + 1, c.ids.length - 1)
+  }))
+  $('#panneauControle').querySelectorAll('[data-cpt]').forEach((b) => b.addEventListener('click', () => {
+    page[b.dataset.cpt] = Math.max(0, (page[b.dataset.cpt] || 0) + +b.dataset.d); sauver(); afficherControle()
+  }))
+  $('#panneauControle').querySelectorAll('[data-page]').forEach((b) => b.addEventListener('click', () => { c.position = +b.dataset.page; sauver(); afficherControle() }))
+  $('#cqResultats').onclick = () => { c.vue = 'resultats'; sauver(); afficherControle() }
+  $('#cqPrec').onclick = () => { c.position--; sauver(); afficherControle() }
+  const suivante = () => { const i = c.pages.findIndex((p, j) => j > c.position && p.etat === 'a-faire'); c.position = i >= 0 ? i : Math.min(c.position + 1, c.pages.length - 1) }
+  $('#cqValider').onclick = () => {
+    page.etat = 'faite'
+    // La page est maintenant identifiée : les lignes sans photo y sont rattachées (utile dans l'onglet Saisie).
+    for (const x of lignesPage(page)) if (!x.l.photo) x.l.photo = page.photo
+    if (c.pages.every((p) => p.etat !== 'a-faire')) c.vue = 'resultats'; else suivante()
     sauver(); afficherControle()
   }
-  $('#precedente').onclick = () => { c.position = Math.max(0, c.position - 1); sauver(); afficherControle() }
-  $('#recommencer').onclick = () => {
-    if (confirm('Effacer ce contrôle et tirer un nouvel échantillon ?')) { delete etat.controles[etat.service]; sauver(); afficherControle() }
-  }
-  $('#exporterControle').onclick = () => telecharger(`controle-qualite-${etat.service.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`, [
-    'Colonne;Lignes vérifiées;Cases fausses;Taux d’erreur (%)',
-    ...r.parColonne.map((x) => [x.colonne, r.lignes, x.erreurs, x.taux.toFixed(1)].map(csvCellule).join(';')),
-    ['Toutes colonnes', r.lignes, r.total, r.global.toFixed(1)].map(csvCellule).join(';')
+  $('#cqPasser').onclick = () => { page.etat = 'passee'; if (c.pages.every((p) => p.etat !== 'a-faire')) c.vue = 'resultats'; else suivante(); sauver(); afficherControle() }
+  $('#cqRecommencer').onclick = () => { if (confirm('Effacer ce contrôle et en commencer un nouveau ?')) { delete etat.controles[etat.service]; sauver(); afficherControle() } }
+}
+
+function htmlResultatsControle(c) {
+  const r = resultatsControle(c), N = lignesService().length, nbCols = colonnesControlees().length
+  const [v, cls] = verdict(r.global), passees = c.pages.filter((p) => p.etat === 'passee').length, restantes = c.pages.filter((p) => p.etat === 'a-faire').length
+  const icTxt = (i) => (Number.isFinite(i[0]) ? ` [${pc(i[0])} ; ${pc(i[1])}]` : '')
+  const partOubli = r.lignes + r.oubliees ? r.oubliees / (r.lignes + r.oubliees) : NaN
+  const estimCases = Number.isFinite(r.global) ? Math.round(r.global * N * nbCols) : NaN
+  const phrase = r.lignes ? `La qualité de la saisie a été mesurée sur un échantillon aléatoire de ${r.pages.length} pages du registre (${r.lignes} lignes, ${r.cases} cases), comparées une à une aux photos. `
+    + `Le taux d’erreur est de ${pc(r.global)} des cases (intervalle de confiance à 95 % par bootstrap sur les pages :${icTxt(r.icGlobal) || ' non calculable avec moins de 5 pages'}) ; `
+    + `${pc(r.lignesFausses, 0)} des lignes contiennent au moins une erreur. Sur les ${r.nbColsOcc} colonnes qui servent au calcul de l’occupation (dates, nombre de jours, issue, prix), le taux d’erreur est de ${pc(r.occ)}${icTxt(r.icOcc)}. `
+    + `${r.oubliees ? `${r.oubliees} ligne(s) du registre n’avai(en)t pas été saisie(s) (${pc(partOubli)} des lignes), ` : 'Aucune ligne du registre n’avait été oubliée, '}${r.enTrop ? `et ${r.enTrop} ligne(s) saisie(s) en trop.` : 'et aucune ligne n’a été saisie en trop.'}`
+    : ''
+  return `
+    <div class="cq-entete">
+      <div><div class="card-kicker">Contrôle qualité · ${echapper(registre().nom)}</div><h4 style="margin:2px 0 0">Résultats</h4></div>
+      <button id="cqRetour" class="btn btn-secondary btn-sm">‹ Retour aux pages</button>
+    </div>
+    <p class="text-muted" style="font-size:12.5px;margin:4px 0 12px">${r.pages.length} page(s) vérifiée(s)${passees ? `, ${passees} passée(s)` : ''}${restantes ? `, <b>${restantes} encore à vérifier</b>` : ''}. Les résultats se mettent à jour à chaque page.</p>
+    ${!r.lignes ? '<div class="alert info">Vérifiez au moins une page pour voir les résultats.</div>' : `
+    <div class="cq-chiffres">
+      <div><span>Taux d’erreur (toutes les cases)</span><b>${pc(r.global)}</b><em>IC 95 %${icTxt(r.icGlobal) || ' : à partir de 5 pages'}</em><span class="tag ${cls}" style="margin-top:4px">${v}</span></div>
+      <div><span>Colonnes de l’occupation</span><b>${pc(r.occ)}</b><em>IC 95 %${icTxt(r.icOcc) || ' —'}</em></div>
+      <div><span>Lignes avec au moins une erreur</span><b>${pc(r.lignesFausses, 0)}</b><em>IC 95 %${icTxt(r.icLignes) || ' —'}</em></div>
+      <div><span>Lignes oubliées / en trop</span><b>${r.oubliees} / ${r.enTrop}</b><em>${pc(partOubli)} de lignes oubliées</em></div>
+      <div><span>Échantillon</span><b>${r.lignes} lignes</b><em>${r.cases} cases · ${pc(r.lignes / Math.max(1, N), 0)} de la saisie</em></div>
+      <div><span>Estimation sur toute la saisie</span><b>≈ ${Number.isFinite(estimCases) ? estimCases : '—'} cases</b><em>fausses sur ${N * nbCols} (${N} lignes)</em></div>
+    </div>
+    <div class="card-kicker" style="margin-top:var(--space-4)">Par colonne</div>
+    <div class="table-wrap"><table class="table cq-res"><thead><tr><th>Colonne</th><th class="num">Erreurs</th><th class="num">Taux</th><th class="num">IC 95 % (Wilson)</th><th style="width:140px"></th><th>Lecture</th></tr></thead><tbody>
+      ${r.parColonne.map((x) => `<tr><td>${echapper(x.colonne)}${x.occupation ? ' <span class="tag tag-neutral" title="Sert au calcul de l’occupation">occupation</span>' : ''}</td>
+        <td class="num">${x.erreurs} / ${r.lignes}</td><td class="num"><b>${pc(x.taux)}</b></td><td class="num">${pc(x.ic[0])} – ${pc(x.ic[1])}</td>
+        <td><div class="bar ${x.taux > 0.05 ? 'sev-1' : x.taux > 0.02 ? 'sev-3' : 'sev-4'}"><span style="width:${Math.min(100, Math.max(100 * x.taux * 5, x.taux ? 3 : 0))}%"></span></div></td>
+        <td>${x.taux > 0.05 ? '<b>à revérifier en entier</b>' : x.taux > 0.02 ? 'à surveiller' : 'fiable'}</td></tr>`).join('')}
+    </tbody></table></div>
+    <p class="text-muted" style="font-size:12px">Barre : pleine à 20 %. Repères : moins de 2 % fiable, 2 à 5 % à surveiller, plus de 5 % à revérifier sur toutes les lignes.</p>
+    <div class="card-kicker" style="margin-top:var(--space-4)">Erreurs trouvées, à corriger (${r.detail.length})</div>
+    ${r.detail.length ? `<div class="table-wrap" style="max-height:260px;overflow:auto"><table class="table cq-res"><thead><tr><th>Page</th><th>Mois</th><th class="num">N°</th><th>Colonne</th><th>Valeur saisie</th><th></th></tr></thead><tbody>
+      ${r.detail.map((d) => `<tr><td>${echapper(d.p.photo)}</td><td>${libelleMois(d.p.mois)}</td><td class="num">${d.x.n}</td><td>${echapper(colonnes().find((col) => col.k === d.k)?.l ?? d.k)}</td>
+        <td>${echapper(d.x.l[d.k]) || '<span class="text-muted">vide</span>'}</td><td><button class="btn btn-ghost btn-sm" data-corriger="${etat.lignes.indexOf(d.x.l)}">Corriger</button></td></tr>`).join('')}
+    </tbody></table></div>` : '<p class="text-muted" style="font-size:13px">Aucune case fausse.</p>'}
+    <div class="card-kicker" style="margin-top:var(--space-4)">Phrase pour le mémoire</div>
+    <div class="cq-phrase">${phrase}</div>
+    <p class="text-muted" style="font-size:12px">Comment c’est calculé : taux = cases fausses ÷ cases vérifiées. Les pages étant tirées au hasard, l’intervalle de confiance vient d’un bootstrap sur les pages (2 000 tirages avec remise), qui tient compte des erreurs groupées sur une même page ; par colonne, intervalle de Wilson. Plus on vérifie de pages, plus l’intervalle se resserre.</p>`}
+    <div class="row" style="margin-top:var(--space-3)">
+      <button id="cqExporter" class="btn btn-secondary btn-sm" ${r.lignes ? '' : 'disabled'}>Exporter les résultats (CSV)</button>
+      <button id="cqCopier" class="btn btn-ghost btn-sm" ${r.lignes ? '' : 'disabled'}>Copier la phrase</button>
+      <button id="cqPlus" class="btn btn-ghost btn-sm" ${photos.length ? '' : 'disabled'}>Ajouter 5 pages</button>
+    </div>`
+}
+function brancherResultatsControle(c) {
+  const r = resultatsControle(c)
+  $('#cqRetour').onclick = () => { c.vue = 'page'; sauver(); afficherControle() }
+  $('#cqPlus').onclick = () => { const avant = c.pages.length; tirerPages(5); const cc = controle(); cc.position = Math.min(avant, cc.pages.length - 1); sauver(); afficherControle() }
+  $('#cqCopier').onclick = () => navigator.clipboard?.writeText($('.cq-phrase')?.textContent ?? '').then(() => message('Phrase copiée.'))
+  $('#panneauControle').querySelectorAll('[data-corriger]').forEach((b) => b.addEventListener('click', () => {
+    const i = +b.dataset.corriger; if (i < 0) return
+    document.querySelector('input[name=onglet][value=saisie]').click(); editerLigne(i)
+  }))
+  $('#cqExporter').onclick = () => telecharger(`controle-qualite-${etat.service.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`, [
+    'Résumé;Valeur',
+    ...[['Pages vérifiées', r.pages.length], ['Lignes vérifiées', r.lignes], ['Cases vérifiées', r.cases], ['Cases fausses', r.erreurs],
+      ['Taux d’erreur (%)', (100 * r.global).toFixed(2)], ['IC 95 % bas (%)', (100 * r.icGlobal[0]).toFixed(2)], ['IC 95 % haut (%)', (100 * r.icGlobal[1]).toFixed(2)],
+      ['Taux d’erreur colonnes occupation (%)', (100 * r.occ).toFixed(2)], ['Lignes avec au moins une erreur (%)', (100 * r.lignesFausses).toFixed(1)],
+      ['Lignes oubliées', r.oubliees], ['Lignes en trop', r.enTrop]].map((x) => x.map(csvCellule).join(';')),
+    '', 'Colonne;Lignes vérifiées;Cases fausses;Taux d’erreur (%);IC 95 % bas (%);IC 95 % haut (%)',
+    ...r.parColonne.map((x) => [x.colonne, r.lignes, x.erreurs, (100 * x.taux).toFixed(2), (100 * x.ic[0]).toFixed(2), (100 * x.ic[1]).toFixed(2)].map(csvCellule).join(';')),
+    '', 'Page;Mois;N°;Colonne;Valeur saisie',
+    ...r.detail.map((d) => [d.p.photo, d.p.mois, d.x.n, colonnes().find((col) => col.k === d.k)?.l ?? d.k, d.x.l[d.k]].map(csvCellule).join(';')),
   ])
 }
 

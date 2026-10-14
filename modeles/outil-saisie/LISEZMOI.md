@@ -165,10 +165,34 @@ la **photo** (molette : zoom, glisser : déplacer, boutons : pivoter, contraste,
 Recopier des centaines de lignes à la main entraîne forcément quelques erreurs. Ce contrôle **mesure** le
 taux d'erreur, chiffre à mettre dans le mémoire.
 
-1. Choisir la taille de l'échantillon (10 % suffit en général) et **Tirer au hasard**.
-2. Pour chaque ligne tirée, la photo s'affiche : comparer case par case et cocher les cases fausses.
-3. L'outil donne le **taux d'erreur par colonne** et global. Une colonne avec beaucoup d'erreurs doit être
-   revérifiée en entier.
+Le contrôle se fait **page par page**, car les lignes transcrites depuis les CSV ne savent pas de quelle photo
+elles viennent : c'est la photo qu'on tire au hasard, et c'est elle qui retrouve ses lignes.
+
+1. **Ouvrir les photos** du registre (JPEG ; convertir les HEIC avec `convertir_photos.bat`).
+2. Choisir le nombre de pages (20 par défaut, environ 300 lignes) et **Tirer au hasard**. On peut aussi
+   ajouter une page précise.
+3. Pour chaque page, la photo s'affiche à gauche. Taper le **mois** et le **premier et le dernier N° d'ordre**
+   visibles sur la photo (la numérotation repart à 1 chaque mois). Les lignes saisies correspondantes
+   s'affichent à droite, dans l'ordre du registre ; les N° absents de la saisie sont signalés, les doublons
+   (même N° deux fois) surlignés.
+4. **Cliquer chaque case différente de la photo** (elle devient rouge). Compter avec + / − les lignes de la
+   photo **oubliées** dans la saisie et les lignes saisies **en trop**.
+5. **Page vérifiée, suivante** (ou **Passer cette page** si elle est illisible ou d'un autre registre). Une page
+   vérifiée rattache sa photo aux lignes qui n'en avaient pas : l'onglet Saisie l'affiche ensuite.
+6. **Voir les résultats** :
+   - taux d'erreur global = cases fausses ÷ cases vérifiées, avec un intervalle de confiance à 95 % par
+     **bootstrap sur les pages** (2 000 tirages avec remise, à partir de 5 pages) : la page est l'unité tirée
+     au hasard, et les erreurs d'une même page se ressemblent ;
+   - taux d'erreur sur les **colonnes de l'occupation** (dates, nombre de jours, issue, prix) : ce sont elles qui
+     comptent pour le mémoire ;
+   - part des lignes avec au moins une erreur, lignes oubliées et en trop ;
+   - taux par colonne avec un **intervalle de Wilson** ; plus de 5 % : colonne à revérifier en entier ;
+   - estimation du nombre de cases fausses sur toute la saisie ;
+   - **liste des erreurs** avec un bouton **Corriger** qui ouvre la ligne dans l'onglet Saisie ;
+   - une **phrase prête pour le mémoire** et l'export CSV (résumé, colonnes, détail des erreurs).
+
+Repères : moins de 1 % de cases fausses, très bonne qualité ; moins de 2 %, bonne ; 2 à 5 %, acceptable ;
+au-delà, la saisie est à reprendre. Le contrôle se fait en plusieurs séances : tout est gardé dans la sauvegarde.
 
 ---
 

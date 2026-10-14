@@ -43,6 +43,30 @@ def decoupage_final(tab: Tableau, debut_test: str | pd.Timestamp) -> Decoupage:
     return Decoupage(entr, test, d)
 
 
+def decoupages_test_mensuels(tab: Tableau, debut_test: str | pd.Timestamp) -> list[Decoupage]:
+    """
+    Test final découpé en blocs d'un mois, avec réentraînement au début de chaque mois.
+
+    Bloc m (origines du mois m) : entraînement sur toutes les lignes dont la cible précède le 1er du
+    mois m, donc y compris les mois de test déjà écoulés ; c'est ce qui se passerait en service avec
+    un réentraînement mensuel. Le premier bloc est identique à decoupage_final (rien du test n'est
+    connu) ; les suivants montrent si réentraîner chaque mois améliore la prévision.
+    """
+    d = pd.Timestamp(debut_test).normalize().replace(day=1)
+    fin = pd.Timestamp(tab.dates_origine.max())
+    decoupages = []
+    while d <= fin:
+        suivant = d + pd.DateOffset(months=1)
+        entr = torch.nonzero(torch.tensor(tab.dates_cible < d)).flatten()
+        ev = torch.nonzero(torch.tensor((tab.dates_origine >= d) & (tab.dates_origine < suivant))).flatten()
+        if len(entr) and len(ev):
+            decoupages.append(Decoupage(entr, ev, d))
+        d = suivant
+    if not decoupages:
+        raise ValueError("Découpage vide : vérifiez la date de début du test.")
+    return decoupages
+
+
 def origines_glissantes(tab: Tableau, debut: str | pd.Timestamp, fin: str | pd.Timestamp,
                         pas: int = 14, minimum_entrainement: int = 60) -> list[Decoupage]:
     """Découpages successifs entre `debut` et `fin` (fin exclue : typiquement le début du test)."""

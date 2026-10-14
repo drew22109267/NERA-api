@@ -13,7 +13,16 @@ Déroulé :
      comme en conditions réelles ;
   3. le niveau 5 (empilement) apprend ses poids sur les prévisions hors échantillon de la
      validation glissante d'avant le verrou, puis combine les prévisions du coffre ;
-  4. métriques et tests de Diebold-Mariano sur la période du coffre.
+  4. métriques et tests de Diebold-Mariano sur la période du coffre, au total et mois par mois.
+
+Réentraînement (option --reentrainement) :
+  mensuel (défaut)  le coffre est découpé en blocs d'un mois ; au début de chaque mois, chaque modèle
+                    est réentraîné avec tout ce qui précède, mois de test déjà écoulés compris
+                    (septembre : appris jusqu'au 31 août ; octobre : appris jusqu'au 30 septembre).
+                    Le bloc de septembre est un test à 1 mois, l'ensemble un test à 2 mois avec mise à
+                    jour mensuelle, comme en service ;
+  aucun             un seul entraînement avant le verrou, puis deux mois de prévisions sans mise à jour.
+Lancer les deux montre ce que rapporte le réentraînement mensuel.
 
 Exemple :
     ~/memoire-env/bin/python validation_finale.py donnees/<export>.csv --service PED --lits 20 \
@@ -35,7 +44,7 @@ from svr import references as R
 from svr.caracteristiques import construire
 from svr.modeles import Entrainement
 from svr.niveaux import Hyperparametres, fabrique
-from svr.validation import Decoupage, decoupage_final, evaluer, origines_glissantes
+from svr.validation import Decoupage, decoupage_final, decoupages_test_mensuels, evaluer, origines_glissantes
 
 NOMS = {1: "1 · SVR linéaire", 2: "2 · SVR RBF", 3: "3 · SVR quantile RBF", 4: "4 · SVR quantile composite"}
 
@@ -59,6 +68,8 @@ def main() -> None:
     p.add_argument("--extraction", required=True, help="date du relevé du registre (aaaa-mm-jj)")
     p.add_argument("--horizons", type=int, nargs="+", default=[1, 3, 7])
     p.add_argument("--confirmation", required=True)
+    p.add_argument("--reentrainement", choices=["mensuel", "aucun"], default="mensuel",
+                   help="mensuel : réentraîner au début de chaque mois du coffre ; aucun : un seul entraînement")
     p.add_argument("--debut-validation", help="début de la validation glissante utilisée pour l'empilement")
     a = p.parse_args()
 
@@ -73,15 +84,18 @@ def main() -> None:
         print(f"══ Horizon J+{h} — test sur le coffre (origines à partir du {DATE_VERROU:%d/%m/%Y})")
         hp = hyperparametres(sortie / f"hyperparametres_{a.service}_h{h}.json")
         tab = construire(occ, h)
-        final = decoupage_final(tab, DATE_VERROU)
-        y, orig = tab.y[final.evaluation], tab.origines[final.evaluation]
+        blocs = (decoupages_test_mensuels(tab, DATE_VERROU) if a.reentrainement == "mensuel"
+                 else [decoupage_final(tab, DATE_VERROU)])
+        idx = torch.cat([b.evaluation for b in blocs])           # même ordre que les prévisions d'evaluer
+        y, orig = tab.y[idx], tab.origines[idx]
+        mois = pd.DatetimeIndex(tab.dates_origine[idx.numpy()]).strftime("%Y-%m")
 
         previsions = {"0 · persistance": R.persistance(tab.serie, orig, h),
                       "0 · saisonnière": R.saisonniere(tab.serie, orig, h),
                       "0 · moyenne mobile 7 j": R.moyenne_mobile(tab.serie, orig, h)}
         for niveau, nom in NOMS.items():
             print(f"  {nom}…")
-            previsions[nom] = evaluer(tab, [final], fabrique(niveau, hp[niveau], tab.blocs))["prevision"]
+            previsions[nom] = evaluer(tab, blocs, fabrique(niveau, hp[niveau], tab.blocs))["prevision"]
 
         # Empilement : poids appris sur les prévisions hors échantillon d'avant le verrou.
         glissants = origines_glissantes(tab, debut_val, DATE_VERROU, pas=14)
@@ -102,14 +116,25 @@ def main() -> None:
 
         tableau = pd.DataFrame([{"niveau": n, **mesures(y, pr, hp[3].tau)} for n, pr in previsions.items()]).set_index("niveau")
         print(tableau.to_string(), "\n")
-        tableau.to_csv(sortie / f"validation_finale_{a.service}_h{h}.csv", sep=";", encoding="utf-8-sig")
+        suffixe = "" if a.reentrainement == "mensuel" else "_sans_reentrainement"
+        tableau.to_csv(sortie / f"validation_finale_{a.service}_h{h}{suffixe}.csv", sep=";", encoding="utf-8-sig")
+        # Mois par mois : septembre = test à 1 mois ; octobre = deuxième mois (après réentraînement si mensuel).
+        par_mois = []
+        for m in sorted(set(mois)):
+            masque = torch.tensor(mois == m)
+            sous = lambda pr: {t: v[masque] for t, v in pr.items()} if isinstance(pr, dict) else pr[masque]
+            par_mois += [{"mois": m, "jours": int(masque.sum()), "niveau": n, **mesures(y[masque], sous(pr), hp[3].tau)}
+                         for n, pr in previsions.items()]
+        par_mois = pd.DataFrame(par_mois).set_index(["mois", "niveau"])
+        print(par_mois.to_string(), "\n")
+        par_mois.to_csv(sortie / f"validation_finale_{a.service}_h{h}_par_mois{suffixe}.csv", sep=";", encoding="utf-8-sig")
         ordre = list(previsions)
         for i, nom in enumerate(ordre[1:], start=1):
             for contre in {"0 · persistance", ordre[i - 1]} - {nom}:
-                tests.append({"horizon": h, "modele_A": nom, "modele_B": contre,
+                tests.append({"horizon": h, "reentrainement": a.reentrainement, "modele_A": nom, "modele_B": contre,
                               **M.diebold_mariano(y, point(previsions[nom]), point(previsions[contre]), h=h)})
 
-    pd.DataFrame(tests).to_csv(sortie / f"validation_finale_{a.service}_tests.csv", sep=";", encoding="utf-8-sig", index=False)
+    pd.DataFrame(tests).to_csv(sortie / f"validation_finale_{a.service}_tests{suffixe}.csv", sep=";", encoding="utf-8-sig", index=False)
     print(f"Résultats écrits dans {sortie.resolve()}")
 
 
