@@ -43,7 +43,7 @@ import pandas as pd
 from nera.imputation import valider_estimation
 from nera.chargement import convention_nombre_de_jours, lire_export, lire_lits, periode_exploitable, preparer_sejours
 from nera.doublons import reperer_reports, retirer_reports_confirmes
-from nera.garde_fous import comparer_erlang, verifier_little
+from nera.garde_fous import erlang_b, comparer_erlang, verifier_little
 from nera.indicateurs import indicateurs_avec_fourchette
 from nera.occupation import resume_occupation, trois_scenarios
 from lancer_niveaux import etiquette
@@ -79,6 +79,8 @@ def main() -> None:
     p.add_argument("--service", required=True, help="code du service, ex. PED")
     p.add_argument("--lits", type=int, help="nombre de lits du service (capacité fixe)")
     p.add_argument("--lits-fichier", help="capacité variable : fichier date_debut;lits (remplace --lits)")
+    p.add_argument("--scenarios-lits", type=int, nargs="+",
+                   help="capacité incertaine : refait taux, sureffectif et Erlang B pour chaque nombre de lits (ex. 15 16 17 18 19 20)"),
     p.add_argument("--reports", choices=["garder", "retirer"], default="garder",
                    help="patients « Ancien » réécrits au report : garder (défaut, prudent) ou fusionner les reports confirmés")
     p.add_argument("--fenetre-censure", type=lambda v: v if v == "p95" else int(v), default=30,
@@ -173,6 +175,20 @@ def main() -> None:
                 print(f"  {k} : {v}")
     except ValueError as e:
         print(f"  non calculée : {e}")
+
+    # Capacité incertaine (date du passage de 15 à 20 lits inconnue, lits pas tous opérationnels) : la série des
+    # présents ne dépend pas du nombre de lits ; seuls les indicateurs rapportés aux lits changent.
+    if a.scenarios_lits:
+        lignes = []
+        for c in a.scenarios_lits:
+            p_ = occ["presents"]
+            lignes.append({"lits": c, "taux_occupation_%": round(100 * float(p_.mean()) / c, 1),
+                           "jours_satures_%": round(100 * float((p_ >= c).mean()), 1),
+                           "jours_en_sureffectif": int((p_ > c).sum()), "sureffectif_max": round(float((p_ - c).clip(lower=0).max()), 1),
+                           "erlang_b_%": round(100 * erlang_b(c, float(p_.mean())), 2)})
+        t = pd.DataFrame(lignes).set_index("lits")
+        print("\n── Scénarios de capacité (même série de présents, nombre de lits incertain)\n" + t.to_string())
+        t.to_csv(sortie / f"scenarios_lits_{nom}.csv", sep=";", encoding="utf-8-sig")
 
     if lits is not None:
         tableau = indicateurs_avec_fourchette(occs, sejours)

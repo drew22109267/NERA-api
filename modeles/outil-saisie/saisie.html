@@ -220,6 +220,7 @@
   .ind-section .table th { position: sticky; top: 0; z-index: 1; }
   .ind-section .table td, .ind-section .table th { padding: 6px 9px; }
   .ind-section .table td.num { white-space: nowrap; }
+  .ind-methode { font-size: 11.5px; color: var(--muted); margin: 0 0 6px; }
   .ind-lecture { margin-top: 8px; padding: 9px 12px; border-radius: 5px; background: var(--surface-2); font-size: 12.8px; line-height: 1.5; }
   .ind-options { display: flex; align-items: center; gap: 4px 14px; flex-wrap: wrap; margin-bottom: 8px; font-size: 12.5px; }
   .ind-options select, .ind-options input[type=number] { min-height: 30px; padding: 3px 8px; font-size: 12.5px; width: auto; }
@@ -553,7 +554,8 @@
           <button type="button" class="ind-pop-btn" id="btnCalcul" aria-haspopup="dialog" aria-expanded="false" title="Réglages du calcul de l’occupation"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg><span id="resumeCalcul">Calcul</span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
           <div class="ind-pop" id="popCalcul" role="dialog" aria-label="Réglages du calcul de l'occupation" hidden>
             <div class="ind-pop-k">Calcul de l’occupation</div>
-            <label class="ind-champ">Lits du service <input id="indLits" class="input" type="number" min="1"></label>
+            <label class="ind-champ" title="Capacité au début de la période calculée">Lits du service <input id="indLits" class="input" type="number" min="1"></label>
+            <label class="ind-champ" title="Si le nombre de lits a changé : « date=lits » séparés par « ; », par exemple « 01/03/25=20 » (20 lits à partir du 01/03/25). Chaque jour est alors calculé avec sa propre capacité.">Changements <input id="indLitsPeriodes" class="input" placeholder="ex. 01/03/25=20" style="width:150px"></label>
             <label class="ind-champ" title="Part minimale de séjours de durée connue exigée dans chaque mois de la période calculée (90 % dans NERA)">Durées connues ≥
               <select id="indSeuil" class="input"><option value="0.9">90 %</option><option value="0.8">80 %</option><option value="0.7">70 %</option><option value="0.5">50 %</option></select></label>
             <label class="ind-champ" title="Que faire d'un séjour sans date de sortie ni nombre de jours ?">Durée inconnue
@@ -2023,7 +2025,7 @@ const METHODE_DEFAUT = { seuil: 0.9, inconnues: 'exclure', censure: 'fixe', comp
 const lireDateSouple = (v) => lireDate(String(v ?? '').replace(/\s*\?+\s*$/, '').trim())
 function calculerIndicateurs(lits, par, methode = METHODE_DEFAUT) {
   const lireDate = lireDateSouple
-  const { seuil, inconnues, censure, comptage } = { ...METHODE_DEFAUT, ...methode }
+  const { seuil, inconnues, censure, comptage, capacites } = { ...METHODE_DEFAUT, ...methode }
   // Comptage : « minuit » → présent les jours entrée ≤ d < sortie (nuits) ; « journee » → entrée ≤ d ≤ sortie
   // (chaque jour de présence, jour de sortie compris). Toutes les fins de séjour sont décalées d'un jour.
   const decal = comptage === 'journee' ? 1 : 0
@@ -2175,6 +2177,12 @@ function calculerIndicateurs(lits, par, methode = METHODE_DEFAUT) {
     for (let i = 0; i < n; i++) { c += delta[i]; res.push(Math.round(c * 1e10) / 1e10) }
     return res
   }
+  // Capacité jour par jour : « Lits du service » au départ, puis chaque changement « jj/mm/aa=lits » à partir de
+  // sa date. TOM = Σ présents ÷ Σ lits du jour ; sureffectif, rotation et intervalle de rotation utilisent la
+  // capacité de chaque jour (lits ajoutés en cours de route).
+  const changements = String(capacites ?? '').split(/[;\n]+/).map((x) => x.trim().match(/^(.+?)\s*=\s*(\d+)$/)).filter(Boolean)
+    .map((m) => { const dd = lireDate(m[1].trim()); return { j: dd ? jourNum(dd.d) : null, lits: +m[2] } }).filter((x) => x.j !== null && x.lits > 0).sort((a, b) => a.j - b.j)
+  const litsJour = lits ? Array.from({ length: n }, (_, i) => changements.filter((x) => x.j <= debut + i).at(-1)?.lits ?? lits) : null
   const finsAttendues = fins((x) => x.p)
   const presents = recenser(finsAttendues), bas = recenser(fins(() => 1, 'bas')), haut = recenser(fins(() => 0, 'haut'))
   const termines = finsAttendues.filter((f) => f.reelle && f.jour > debut && f.jour <= fin + 1)
@@ -2185,14 +2193,15 @@ function calculerIndicateurs(lits, par, methode = METHODE_DEFAUT) {
   const bloc = (periode, idx, sorties) => {
     const J = idx.length, JH = somme(idx, presents), ns = sorties.reduce((a, f) => a + f.poids, 0)
     const dc = sorties.filter((f) => f.x.deces).reduce((a, f) => a + f.poids, 0)
-    const tom = (serie) => lits && J ? arr(100 * somme(idx, serie) / (lits * J)) : null
+    const capa = litsJour ? idx.reduce((a, i) => a + litsJour[i], 0) : 0          // Σ des lits de chaque jour
+    const tom = (serie) => lits && J ? arr(100 * somme(idx, serie) / capa) : null
     return { periode, J, adm: idx.reduce((a, i) => a + adm[i], 0), ns: arr(ns, 2), JH: arr(JH, 2),
       tom: tom(presents), tomBas: tom(bas), tomHaut: tom(haut), max: J ? arr(Math.max(...idx.map((i) => presents[i])), 2) : 0,
-      sur: lits ? idx.filter((i) => presents[i] > lits).length : 0,
+      sur: lits ? idx.filter((i) => presents[i] > litsJour[i]).length : 0, lits: lits && J ? arr(capa / J, 1) : null,
       dms: ns ? arr(sorties.reduce((a, f) => a + f.poids * (f.jour - f.x.entree), 0) / ns, 2) : null,
       // Durée qui correspond au comptage (loi de Little L = λW) : nuits au recensement de minuit, nuits + 1 en journée.
       wComptage: ns ? arr(sorties.reduce((a, f) => a + f.poids * (f.jour - f.x.entree + decal), 0) / ns, 2) : null,
-      rot: lits ? arr(ns / lits, 2) : null, inter: lits && ns ? arr((lits * J - JH) / ns, 2) : null,
+      rot: lits ? arr(ns / (capa / J), 2) : null, inter: lits && ns ? arr((capa - JH) / ns, 2) : null,
       dc: arr(dc, 2), mort: ns ? arr(100 * dc / ns, 2) : null }
   }
   const groupes = {}
@@ -2209,7 +2218,7 @@ function calculerIndicateurs(lits, par, methode = METHODE_DEFAUT) {
     debutNum: debut, adm, premierSaisi: versDate(premierSaisi), dernierSaisi: versDate(dernierSaisi), base: versDate(base),
     sorties: termines.map((f) => ({ jour: f.jour, poids: f.poids, nuits: f.jour - f.x.entree, l: f.x.l })),
     // Tous les séjours (pour la simulation de Monte-Carlo et l'analyse de survie) et la fin de l'observation.
-    sejours, extraction }
+    sejours, extraction, litsJour, changementsLits: changements }
 }
 
 // ── Statistiques descriptives de la saisie (toutes les lignes de la période saisie) ──────────
@@ -2320,10 +2329,11 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document
 function resumerCalcul() {
   const lits = $('#indLits').value, inc = { exclure: 'exclue', estimee: 'estimée', mediane: 'médiane' }[$('#indInconnues').value], cen = $('#indCensure').value === 'p95' ? 'p95' : '30 j'
   const cpt = $('#indComptage').value === 'journee' ? 'journée' : 'minuit'
-  $('#resumeCalcul').textContent = `${lits ? `${lits} lits` : 'lits ?'} · ≥ ${Math.round(100 * +$('#indSeuil').value)} % · ${inc} · ${cen} · ${cpt}`
+  const chg = ($('#indLitsPeriodes').value.match(/=\s*(\d+)/g) ?? []).map((x) => x.replace(/\D/g, ''))
+  $('#resumeCalcul').textContent = `${lits ? `${[lits, ...chg].join('→')} lits` : 'lits ?'} · ≥ ${Math.round(100 * +$('#indSeuil').value)} % · ${inc} · ${cen} · ${cpt}`
   $('#indParChoix').value = document.querySelector('input[name=indPar]:checked').value
 }
-['#indLits', '#indSeuil', '#indInconnues', '#indCensure', '#indComptage'].forEach((k) => $(k).addEventListener('input', resumerCalcul))
+['#indLits', '#indLitsPeriodes', '#indSeuil', '#indInconnues', '#indCensure', '#indComptage'].forEach((k) => $(k).addEventListener('input', resumerCalcul))
 // Barre latérale : réduite (icônes seules, mémorisé) ou ouverte par-dessus la page sur petit écran.
 const reduireSidebar = (oui) => { $('#shell').classList.toggle('collapsed', oui); $('#reduireSidebar').setAttribute('aria-expanded', String(!oui)); $('#reduireSidebar').title = oui ? 'Agrandir la barre latérale' : 'Réduire la barre latérale' }
 try { reduireSidebar(localStorage.getItem('saisie.sidebarReduite') === '1') } catch {}
@@ -2363,7 +2373,7 @@ else { construireFormulaire(); majSuggestions(); majListePhotos(); sauver(); nou
 </script>
 <script src="calendrier.js?v=1"></script>
 <script src="statistiques.js?v=12"></script>
-<script src="indicateurs.js?v=53"></script>
-<script src="occupation-validation.js?v=5"></script>
+<script src="indicateurs.js?v=54"></script>
+<script src="occupation-validation.js?v=6"></script>
 </body>
 </html>

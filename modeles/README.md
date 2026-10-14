@@ -385,6 +385,16 @@ date de sortie.
 **Capacité variable** (lits ajoutés ou fermés) : N · J est remplacé par Σ_d N_d ; la rotation
 utilise le nombre moyen de lits.
 
+**Capacité incertaine (cas de la pédiatrie : de 15 à 20 lits entre 2024 et 2026, date du changement et lits
+réellement opérationnels inconnus).** Le nombre de présents ne dépend pas du nombre de lits : la série, le
+modèle SVR et ses prévisions ne changent pas. Seuls les indicateurs rapportés aux lits changent (taux, jours
+saturés, sureffectif, rotation, intervalle de rotation, Erlang B). Trois outils :
+- `--lits-fichier` (Python) ou le champ « Changements » de l'outil (`01/03/25=20`) : chaque jour avec sa capacité ;
+- `--scenarios-lits 15 16 17 18 19 20` : les mêmes indicateurs pour chaque capacité possible ;
+- dans le mémoire, présenter le taux comme une **plage** (par exemple 42 % avec 20 lits à 56 % avec 15 lits,
+  recensement de minuit) tant que la date du changement et le nombre de lits opérationnels ne sont pas confirmés
+  par le service (cahier de garde, administration, inventaire des lits).
+
 ### 5.8 Loi de Little et Erlang B (garde-fous)
 
 Code : `nera/garde_fous.py` et la section « Loi de Little et file d'attente » de l'outil.

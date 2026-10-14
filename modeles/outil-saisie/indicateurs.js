@@ -158,6 +158,9 @@ const OPTIONS_SERIES = [
 const CAL = window.CALENDRIER_CM
 const ferieDe = (j) => CAL?.ferie(j) ?? null
 const vacancesDe = (j) => (CAL?.vacancesConnues(j) ? (CAL.vacances(j) ? 1 : 0) : null)
+// Méthode de comptage en vigueur (bouton « Calcul ») : tous les libellés de graphes la reprennent.
+const enJournee = () => cacheIndicateurs?.d?.reglages?.comptage === 'journee'
+const nomPresents = (court = false) => `${court ? 'Présents' : 'Enfants présents'} ${enJournee() ? 'dans la journée' : 'à minuit'}`
 const SERIES_CHOIX = [['presents', 'Enfants présents'], ['taux', 'Taux d’occupation (%)'], ['adm', 'Admissions / jour'], ['sor', 'Sorties / jour']]
 const JOURS_SEMAINE = ['lundi', 'mardi', 'mercredi', 'jeudi', 'vendredi', 'samedi', 'dimanche']
 const jourSemaine = (j) => (new Date(j * 86400000).getUTCDay() + 6) % 7
@@ -172,10 +175,11 @@ const moyennePonderee = (liste) => { const w = liste.reduce((a, b) => a + b.poid
 
 function serieChoisie(c, cle) {
   const { d, lits } = c
-  if (cle === 'taux' && lits) return { x: d.presents.map((v) => 100 * v / lits), bas: d.bas.map((v) => 100 * v / lits), haut: d.haut.map((v) => 100 * v / lits), nom: 'Taux d’occupation', unite: ' %', cap: 100 }
+  const L = (i) => d.litsJour?.[i] ?? lits                        // capacité du jour i
+  if (cle === 'taux' && lits) return { x: d.presents.map((v, i) => 100 * v / L(i)), bas: d.bas.map((v, i) => 100 * v / L(i)), haut: d.haut.map((v, i) => 100 * v / L(i)), nom: 'Taux d’occupation', unite: ' %', cap: 100 }
   if (cle === 'adm') return { x: d.adm.slice(), nom: 'Admissions du jour', unite: '' }
   if (cle === 'sor') return { x: sortiesParJour(d), nom: 'Sorties du jour', unite: '' }
-  return { x: d.presents.slice(), bas: d.bas, haut: d.haut, nom: d.reglages?.comptage === 'journee' ? 'Enfants présents dans la journée' : 'Enfants présents à minuit', unite: '', cap: lits }
+  return { x: d.presents.slice(), bas: d.bas, haut: d.haut, nom: nomPresents(), unite: '', cap: lits }
 }
 function sortiesParJour(d) { const s = new Array(d.presents.length).fill(0); for (const f of d.sorties) { const i = f.jour - d.debutNum; if (i >= 0 && i < s.length) s[i] += f.poids } return s }
 const bandeauStats = (paires) => `<div class="ind-stats">${paires.map(([l, v]) => `<div><span>${l}</span><b>${v}</b></div>`).join('')}</div>`
@@ -275,7 +279,7 @@ const ONGLETS = [
   ] },
   { nom: 'Tableaux', ico: 'tableau', desc: 'Récapitulatif mensuel, indicateurs, causes', sections: [
     { t: 'Récapitulatif mensuel (à comparer avec celui du registre)', rendre: (c) => ({ html: htmlRecap(c), lecture: `les mêmes chiffres que le <b>récapitulatif mensuel</b> écrit à la fin de chaque mois dans le registre, calculés à partir de <b>votre saisie</b>. S’ils diffèrent beaucoup, il manque des lignes ou certaines sont mal saisies : c’est le contrôle de qualité le plus simple à montrer dans le mémoire.` }) },
-    { t: 'Indicateurs hospitaliers par période', occ: true, rendre: (c) => ({ html: htmlTable(c), lecture: `<b>Journées d’hospitalisation</b> = somme des enfants présents à minuit · <b>TOM</b> = journées ÷ (lits × jours) · <b>DMS</b> = nuits moyennes des séjours terminés · <b>rotation</b> = sorties ÷ lits · <b>intervalle de rotation</b> = (lits × jours − journées) ÷ sorties · décès repérés par « décès / DCD » dans l’observation. Mêmes définitions que l’application NERA.` }) },
+    { t: 'Indicateurs hospitaliers par période', occ: true, rendre: (c) => ({ html: htmlTable(c), lecture: `<b>Journées d’hospitalisation</b> = somme des ${nomPresents().toLowerCase()} · <b>TOM</b> = journées ÷ Σ des lits de chaque jour (lits × jours si la capacité est fixe) · <b>DMS</b> = nuits moyennes des séjours terminés · <b>rotation</b> = sorties ÷ lits · <b>intervalle de rotation</b> = (lits × jours − journées) ÷ sorties · décès repérés par « décès / DCD » dans l’observation. Mêmes définitions que l’application NERA.` }) },
     { t: 'Indicateurs par cause d’hospitalisation', rendre: (c) => ({ html: htmlCauses(c), lecture: `pour chaque grande cause : nombre d’enfants, durée moyenne de séjour (sur les séjours terminés), nombre de décès, de SCAM et de référés. Les causes à la fois fréquentes et longues pèsent le plus dans l’occupation des lits.` }) },
   ] },
 ]
@@ -414,7 +418,7 @@ function rendreAdmissions(c, W, H) {
 }
 function rendreHebdo(c) {
   const x = c.d.presents, s = [[], [], [], [], [], [], []]
-  x.forEach((v, i) => s[jourSemaine(c.d.debutNum + i)].push(c.lits ? 100 * v / c.lits : v))
+  x.forEach((v, i) => s[jourSemaine(c.d.debutNum + i)].push(c.lits ? 100 * v / (c.d.litsJour?.[i] ?? c.lits) : v))
   const m = s.map((a) => (a.length ? a.reduce((p, q) => p + q, 0) / a.length : null)), e = s.map((a, j) => (a.length ? Math.sqrt(a.reduce((p, q) => p + (q - m[j]) ** 2, 0) / a.length) : null))
   return { html: barresSvg({ W: c.W, H: c.H, categories: JOURS_SEMAINE, series: [{ nom: c.lits ? 'Taux d’occupation moyen' : 'Enfants présents (moyenne)', valeurs: m, couleur: COUL.bleu }], erreurs: m.map((v, j) => ({ bas: v === null ? null : v - e[j], haut: v === null ? null : v + e[j] })), titreY: c.lits ? 'Taux d’occupation (%)' : 'Enfants présents', suffixe: c.lits ? ' %' : '' }),
     lecture: `l’occupation moyenne selon le jour de la semaine ; le trait noir montre la dispersion (± 1 écart-type). Un jour nettement différent (souvent le week-end, moins de sorties signées) explique pourquoi le modèle de prévision tient compte du jour de la semaine.` }
@@ -450,7 +454,7 @@ function rendreOccMax(c) {
 function rendreNiveaux(c) {
   if (!c.lits) return { html: '<div class="alert warn" style="display:block">Indiquez le nombre de lits pour voir cette répartition.</div>', lecture: 'il faut le nombre de lits.' }
   const cl = ['moins de 50 %', '50 – 70 %', '70 – 85 %', '85 – 100 %', 'plus de 100 %'], n = [0, 0, 0, 0, 0]
-  for (const v of c.d.presents) { const t = 100 * v / c.lits; n[t < 50 ? 0 : t < 70 ? 1 : t < 85 ? 2 : t <= 100 ? 3 : 4]++ }
+  for (const [i, v] of c.d.presents.entries()) { const t = 100 * v / (c.d.litsJour?.[i] ?? c.lits); n[t < 50 ? 0 : t < 70 ? 1 : t < 85 ? 2 : t <= 100 ? 3 : 4]++ }
   return { html: barresSvg({ W: c.W, H: c.H, categories: cl, series: [{ nom: 'Jours', valeurs: n, couleur: COUL.vert }], titreY: 'Nombre de jours' }),
     lecture: `combien de jours le service a été peu rempli, normalement rempli, tendu (85 – 100 %) ou en sureffectif (plus de 100 %). C’est plus parlant qu’une moyenne : un service à 75 % en moyenne peut passer beaucoup de jours au-dessus de 100 %.` }
 }
@@ -625,8 +629,8 @@ const decaler = (x, k) => x.map((_, i) => (i >= k && x[i - k] !== null ? x[i - k
 function donneesJour(c) {
   if (!c.d.message && c.d.presents.length >= 21) {
     const p = c.d.presents, a = c.d.adm, s = sortiesParJour(c.d), deb = c.d.debutNum
-    return [{ k: 'presents', nom: 'Présents à minuit', x: p }, { k: 'adm', nom: 'Admissions du jour', x: a }, { k: 'sor', nom: 'Sorties du jour', x: s },
-      ...(c.lits ? [{ k: 'taux', nom: 'Taux d’occupation (%)', x: p.map((v) => 100 * v / c.lits) }] : []),
+    return [{ k: 'presents', nom: nomPresents(true), x: p }, { k: 'adm', nom: 'Admissions du jour', x: a }, { k: 'sor', nom: 'Sorties du jour', x: s },
+      ...(c.lits ? [{ k: 'taux', nom: 'Taux d’occupation (%)', x: p.map((v, i) => 100 * v / (c.d.litsJour?.[i] ?? c.lits)) }] : []),
       { k: 'p1', nom: 'Présents la veille (J−1)', x: decaler(p, 1) }, { k: 'p7', nom: 'Présents il y a 7 jours (J−7)', x: decaler(p, 7) },
       { k: 'a1', nom: 'Admissions de la veille', x: decaler(a, 1) }, { k: 'am7', nom: 'Admissions, moyenne des 7 jours précédents', x: decaler(moyenneMobile(a, 7), 1) },
       { k: 'we', nom: 'Week-end (1 = oui)', bin: true, x: p.map((_, i) => (jourSemaine(deb + i) >= 5 ? 1 : 0)) }, ...joursCalendrier(p.length, deb), { k: 't', nom: 'Temps (jours écoulés)', x: p.map((_, i) => i) }]
@@ -1463,7 +1467,7 @@ function delaiInscription() {
   d.sort((a, b) => a - b); const v = Math.min(10, Math.max(2, d.length ? d[Math.floor(0.95 * (d.length - 1))] : 2))
   cacheDelai = { cle, v }; return v
 }
-const optionsModele = (c, s) => `${libelle('Série', choix('mSerie', s.cle, s.dispo.map(([k, l]) => [k, l])))}${libelle('Horizon', choix('h', c.opts.h, [[7, '7 jours'], [14, '14 jours'], [30, '30 jours']]))}${libelle('Validation', choix('pv', c.opts.pv, [[15, '15 % finaux'], [20, '20 % finaux'], [30, '30 % finaux']]))}${s.cle === 'brut' ? '' : libelle('Fin de série', choix('mQueue', c.opts.mQueue ?? 'auto', [['auto', `sans les ${delaiInscription()} derniers jours (inscriptions en retard)`], ['tout', 'jusqu’au dernier jour saisi']]))}`
+const optionsModele = (c, s) => `${libelle('Série', choix('mSerie', s.cle, s.dispo.map(([k, l]) => [k, k === 'presents' ? nomPresents() : l])))}${libelle('Horizon', choix('h', c.opts.h, [[7, '7 jours'], [14, '14 jours'], [30, '30 jours']]))}${libelle('Validation', choix('pv', c.opts.pv, [[15, '15 % finaux'], [20, '20 % finaux'], [30, '30 % finaux']]))}${s.cle === 'brut' ? '' : libelle('Fin de série', choix('mQueue', c.opts.mQueue ?? 'auto', [['auto', `sans les ${delaiInscription()} derniers jours (inscriptions en retard)`], ['tout', 'jusqu’au dernier jour saisi']]))}`
 const ORDRE_TXT = (o) => `(${o.p},${o.d},${o.q})(${o.P},${o.D},${o.Q})₇`
 // Tous les modèles, estimés sur l'apprentissage (t < fin), évalués un pas en avant sur la validation (t ≥ fin).
 // Famille des lissages exponentiels (statistiques.js) : du plus simple au plus complet.
@@ -1647,11 +1651,12 @@ function afficherIndicateurs() {
   $('#indLits').value = lits ?? ''
   etat.indMethode ??= {}
   const methode = { ...METHODE_DEFAUT, ...(etat.indMethode[etat.service] ?? {}) }
-  $('#indSeuil').value = String(methode.seuil); $('#indInconnues').value = methode.inconnues; $('#indCensure').value = methode.censure; $('#indComptage').value = methode.comptage ?? 'minuit'
+  $('#indSeuil').value = String(methode.seuil); $('#indInconnues').value = methode.inconnues; $('#indCensure').value = methode.censure; $('#indComptage').value = methode.comptage ?? 'minuit'; $('#indLitsPeriodes').value = methode.capacites ?? ''
   if (typeof resumerCalcul === 'function') resumerCalcul()
   const par = document.querySelector('input[name=indPar]:checked').value
   const d = calculerIndicateurs(lits, par, methode), st = statistiquesSaisie()
-  cacheIndicateurs = { d, st, lits, par, pat: donneesPatients(), brut: serieBrute() }
+  // Capacité affichée (repères, Erlang B, file d'attente) : celle du dernier jour calculé.
+  cacheIndicateurs = { d, st, lits: d.litsJour?.length ? d.litsJour.at(-1) : lits, par, pat: donneesPatients(), brut: serieBrute() }
   cacheIndicateurs.jour = donneesJour(cacheIndicateurs)
   const avant = nbLignesMaj; nbLignesMaj = st.n; derniereMaj = new Date(); signatureIndicateurs = signatureSaisie()
   cacheIndicateurs.ajout = avant === null || serviceMaj !== etat.service ? null : st.n - avant
@@ -1757,8 +1762,10 @@ function htmlSection(s, k, c, W, agrandi = false) {
   const H = agrandi && s.h ? Math.max(s.h, Math.min(560, Math.round(s.h * 1.55))) : (s.h ?? 0); c.H = H; c.W = W
   let r; try { r = s.rendre(c, W, H) } catch (e) { console.error(e); r = { html: vide(`Calcul impossible pour cette section (${echapper(e.message)}).`), lecture: '' } }
   s._survol = r.survol
+  // Mention de la méthode de comptage (et de la capacité variable) en tête de chaque graphe de l'occupation.
+  const methodeTxt = s.occ && c.d?.reglages ? `<div class="ind-methode">${enJournee() ? 'Comptage : présence dans la journée (jour de sortie compris)' : 'Comptage : recensement de minuit (nuits passées)'}${c.d.changementsLits?.length ? ` · capacité variable : ${[c.d.litsJour?.[0], ...c.d.changementsLits.map((x) => `${x.lits} dès le ${fmtDate(versDate(x.j))}`)].join(' → ')}` : ''}</div>` : ''
   return `<section class="ind-section" ${agrandi ? '' : `id="ind-s${k}"`} data-k="${k}">${agrandi ? '' : `<h5><span>${s.t}</span><button type="button" class="ind-agrandir" data-agrandir="${k}" title="Afficher en grand, avec toutes ses statistiques">${ICONE_AGRANDIR} Agrandir</button></h5>`}${r.options ? `<div class="ind-options">${r.options}</div>` : ''}${r.avant ?? ''}
-    <div class="ind-graphe">${r.html}</div>${(etat.indLecture === false && !agrandi) || !r.lecture ? '' : `<div class="ind-lecture"><b>Comment lire :</b> ${r.lecture}</div>`}</section>`
+    ${methodeTxt}<div class="ind-graphe">${r.html}</div>${(etat.indLecture === false && !agrandi) || !r.lecture ? '' : `<div class="ind-lecture"><b>Comment lire :</b> ${r.lecture}</div>`}</section>`
 }
 const ICONE_AGRANDIR = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>'
 // Fenêtre « Agrandir » : la section seule, en grand, avec navigation vers les sections voisines.
@@ -1915,7 +1922,7 @@ function appliquerLits(e) {
 }
 $('#indLits').addEventListener('input', (e) => { clearTimeout(minuterieLits); minuterieLits = setTimeout(() => appliquerLits(e), 350) })
 $('#indLits').addEventListener('change', (e) => { clearTimeout(minuterieLits); appliquerLits(e) })
-for (const [id, cle, conv] of [['#indSeuil', 'seuil', Number], ['#indInconnues', 'inconnues', String], ['#indCensure', 'censure', String], ['#indComptage', 'comptage', String]]) {
+for (const [id, cle, conv] of [['#indSeuil', 'seuil', Number], ['#indInconnues', 'inconnues', String], ['#indCensure', 'censure', String], ['#indComptage', 'comptage', String], ['#indLitsPeriodes', 'capacites', String]]) {
   $(id).addEventListener('change', (e) => { etat.indMethode ??= {}; etat.indMethode[etat.service] = { ...(etat.indMethode[etat.service] ?? {}), [cle]: conv(e.target.value) }; sauver(); afficherIndicateurs() })
 }
 document.querySelectorAll('input[name=indPar]').forEach((r) => r.addEventListener('change', afficherIndicateurs))
