@@ -33,7 +33,7 @@ from svr.recherche import Dimension, essaim_particulaire, recherche_grille
 from svr.validation import evaluer, origines_glissantes
 
 
-COMPTAGES = ("minuit", "journee")
+COMPTAGES = ("minuit", "journee", "pondere")
 
 
 def etiquette(service: str, comptage: str = "minuit") -> str:
@@ -44,7 +44,8 @@ def etiquette(service: str, comptage: str = "minuit") -> str:
 def option_comptage(parser) -> None:
     """Option commune à tous les scripts du modèle (voir nera.occupation.reconstituer_occupation)."""
     parser.add_argument("--comptage", choices=COMPTAGES, default="minuit",
-                        help="série utilisée : minuit (nuits passées, défaut) ou journee (jour de sortie compris) ; "
+                        help="série utilisée : minuit (nuits passées, défaut), journee (jour de sortie compris) ou pondere "
+                             "(présence pondérée par le temps, heures typiques) ; "
                              "lancer d'abord rapport_occupation.py avec la même option")
 
 

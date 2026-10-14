@@ -40,6 +40,8 @@ et pour 1 − p le jour e + n. Les indicateurs (nera.indicateurs) se calculent a
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import pandas as pd
 
 from .chargement import ISSUES
@@ -101,15 +103,37 @@ def lits_par_jour(lits, jours: pd.DatetimeIndex) -> pd.Series:
     return pd.Series(float(lits), index=jours)
 
 
+@dataclass(frozen=True)
+class HeuresPresence:
+    """
+    Heures typiques (le registre n'en donne aucune), pour le comptage « pondere » : chaque enfant compte la
+    fraction de chaque jour où il est réellement là.
+      entree      heure moyenne d'admission (12 h : admissions réparties sur la journée)
+      sortie      heure moyenne de sortie (11 h : sorties après la visite du matin)
+      meme_jour   durée moyenne d'un séjour entré et sorti le même jour (MEO, SCAM précoce), en heures
+    """
+    entree: float = 12.0
+    sortie: float = 11.0
+    meme_jour: float = 8.0
+
+
 def reconstituer_occupation(sejours: pd.DataFrame, date_extraction: str | pd.Timestamp,
                             lits: int | pd.Series | None = None, debut: str | None = None,
-                            scenario: str = "attendue", comptage: str = "minuit") -> pd.DataFrame:
+                            scenario: str = "attendue", comptage: str = "minuit",
+                            heures: HeuresPresence = HeuresPresence()) -> pd.DataFrame:
     """
     Une ligne par jour, de la première admission (ou `debut`) à la veille de l'extraction :
       presents          enfants hospitalisés (espérance pour le scénario « attendue ») selon `comptage` :
                           « minuit »  : recensement de minuit, présent si entrée ≤ d < sortie (nuits passées) ;
                           « journee » : présent dans la journée, entrée ≤ d ≤ sortie (jour de sortie compris ;
                                         un enfant entré et sorti le même jour compte 1)
+                          « pondere » : présence moyenne pondérée par le temps (fraction de chaque jour où
+                                        l'enfant est là, avec les heures typiques `heures`) :
+                                        jour d'entrée 1 − h_e/24, jours pleins 1, jour de sortie h_s/24,
+                                        séjour du même jour durée/24
+      pic_bas, pic_haut encadrement EXACT du plus grand nombre d'enfants présents en même temps dans la
+                        journée d (sans hypothèse d'heure) : max(minuit de d − 1, minuit de d) ≤ pic ≤
+                        comptage journalier de d
       dont_censures     parmi eux, ceux dont la sortie n'est pas encore connue
       admissions        entrées du jour
       sorties_*         sorties du jour, par issue (pondérées pour les sorties calculées)
@@ -120,10 +144,11 @@ def reconstituer_occupation(sejours: pd.DataFrame, date_extraction: str | pd.Tim
     if s.empty:
         raise ValueError("Aucun séjour exploitable pour reconstituer l'occupation.")
     ev = sorties_possibles(sejours, extraction, scenario)
-    if comptage not in ("minuit", "journee"):
-        raise ValueError("comptage : « minuit » ou « journee ».")
+    if comptage not in ("minuit", "journee", "pondere"):
+        raise ValueError("comptage : « minuit », « journee » ou « pondere ».")
     # Comptage journalier : chaque fin de séjour est décalée d'un jour pour la présence (pas pour les sorties).
-    ev_presence = ev.assign(fin=ev["fin"] + pd.Timedelta(days=1)) if comptage == "journee" else ev
+    ev_presence = ev.assign(fin=ev["fin"] + pd.Timedelta(days=1)) if comptage in ("journee", "pondere") else ev
+    ev_jour = ev.assign(fin=ev["fin"] + pd.Timedelta(days=1))
 
     premier = pd.Timestamp(debut) if debut else s["entree"].min()
     jours = pd.date_range(premier, extraction - pd.Timedelta(days=1), freq="D")
@@ -140,6 +165,22 @@ def reconstituer_occupation(sejours: pd.DataFrame, date_extraction: str | pd.Tim
     occ = pd.DataFrame(index=jours)
     occ.index.name = "jour"
     occ["presents"] = cumul(s["entree"], ev_presence)
+    if comptage == "pondere":
+        # Comptage journalier, puis on retire la part du jour où l'enfant n'est pas encore arrivé (jour
+        # d'entrée : h_e/24) ou déjà parti (jour de sortie : 1 − h_s/24) ; un séjour du même jour ne garde que
+        # sa durée m : 1 − a − (1 − m − a) = m. Les sorties sont pondérées comme l'occupation (poids p, 1 − p).
+        a, b, m = heures.entree / 24, heures.sortie / 24, heures.meme_jour / 24
+        corr = s["entree"].value_counts().astype(float) * a
+        reelles_ou_estimees = ev[ev["fin"] < extraction]
+        meme = reelles_ou_estimees["fin"] == reelles_ou_estimees["entree"]
+        part = reelles_ou_estimees["poids"] * (1 - b)
+        part[meme] = reelles_ou_estimees.loc[meme, "poids"] * (1 - m - a)
+        corr = corr.add(part.groupby(reelles_ou_estimees["fin"]).sum(), fill_value=0.0)
+        occ["presents"] = (occ["presents"] - corr.reindex(jours, fill_value=0.0)).round(10)
+    # Encadrement exact du pic de la journée (indépendant de la méthode choisie).
+    minuit = cumul(s["entree"], ev)
+    occ["pic_bas"] = pd.concat([minuit, minuit.shift(1)], axis=1).max(axis=1)
+    occ["pic_haut"] = cumul(s["entree"], ev_jour)
     cens = s["statut"] == "censuree"
     occ["dont_censures"] = (cumul(s.loc[cens, "entree"], ev_presence[ev_presence["sejour"].isin(s.index[cens])]).astype(int)
                             if cens.any() else 0)
@@ -163,9 +204,10 @@ def reconstituer_occupation(sejours: pd.DataFrame, date_extraction: str | pd.Tim
 
 
 def trois_scenarios(sejours: pd.DataFrame, date_extraction, lits: int | pd.Series | None = None,
-                    debut: str | None = None, comptage: str = "minuit") -> dict[str, pd.DataFrame]:
+                    debut: str | None = None, comptage: str = "minuit",
+                    heures: HeuresPresence = HeuresPresence()) -> dict[str, pd.DataFrame]:
     """Les trois séries (attendue, basse, haute), sur les mêmes jours."""
-    return {sc: reconstituer_occupation(sejours, date_extraction, lits, debut, sc, comptage) for sc in SCENARIOS}
+    return {sc: reconstituer_occupation(sejours, date_extraction, lits, debut, sc, comptage, heures) for sc in SCENARIOS}
 
 
 def resume_occupation(occ: pd.DataFrame) -> dict:

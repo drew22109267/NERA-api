@@ -9,7 +9,7 @@ import pytest
 
 from nera.chargement import preparer_sejours
 from nera.garde_fous import erlang_b, verifier_little
-from nera.occupation import reconstituer_occupation, resume_occupation, sorties_possibles
+from nera.occupation import HeuresPresence, reconstituer_occupation, resume_occupation, sorties_possibles
 
 
 def table(lignes):
@@ -50,6 +50,27 @@ def test_comptage_journalier_jour_de_sortie_compris():
     assert jour["presents"].sum() - minuit["presents"].sum() == 2
     with pytest.raises(ValueError):
         reconstituer_occupation(s, "2026-01-06", comptage="midi")
+
+
+def test_presence_ponderee_et_encadrement_du_pic():
+    # A : entré le 1er, sorti le 4 ; B : entré et sorti le 2 (observation) ; C : entré le 3, encore là.
+    # Entrées et sorties à 12 h (a = b = 0,5), séjour du même jour de 6 h (m = 0,25). Calcul à la main :
+    #   1er : A 0,5                     → 0,5
+    #   2   : A 1 + B 0,25              → 1,25
+    #   3   : A 1 + C 0,5               → 1,5
+    #   4   : A 0,5 (sort à midi) + C 1 → 1,5
+    #   5   : C 1                       → 1
+    df = table([("PED", "2026-01-01", "2026-01-04", "Sortie", False),
+                ("PED", "2026-01-02", "2026-01-02", "Sortie", False),
+                ("PED", "2026-01-03", None, None, False)])
+    s, _ = preparer_sejours(df, "PED", "2026-01-06")
+    h = HeuresPresence(entree=12, sortie=12, meme_jour=6)
+    occ = reconstituer_occupation(s, "2026-01-06", comptage="pondere", heures=h)
+    assert occ["presents"].tolist() == [0.5, 1.25, 1.5, 1.5, 1.0]
+    # Pic de la journée encadré sans hypothèse : max(minuit d − 1, minuit d) ≤ pic ≤ comptage journalier.
+    assert occ["pic_bas"].tolist() == [1, 1, 2, 2, 1]
+    assert occ["pic_haut"].tolist() == [1, 2, 2, 2, 1]
+    assert (occ["pic_bas"] <= occ["pic_haut"]).all()
 
 
 def test_sortie_inconnue_exclue_et_autre_service_ignore():

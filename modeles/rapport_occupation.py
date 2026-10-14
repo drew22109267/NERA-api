@@ -45,7 +45,7 @@ from nera.chargement import convention_nombre_de_jours, lire_export, lire_lits, 
 from nera.doublons import reperer_reports, retirer_reports_confirmes
 from nera.garde_fous import erlang_b, comparer_erlang, verifier_little
 from nera.indicateurs import indicateurs_avec_fourchette
-from nera.occupation import resume_occupation, trois_scenarios
+from nera.occupation import HeuresPresence, resume_occupation, trois_scenarios
 from lancer_niveaux import etiquette
 from nera.verrou import DATE_VERROU
 from svr.reproductibilite import ecrire_environnement
@@ -89,8 +89,12 @@ def main() -> None:
                    help="durées inconnues : exclues (défaut), médiane du service, ou estimées par le prix puis l'issue")
     p.add_argument("--rodage-debut", action="store_true",
                    help="saisie commencée en cours de route (fenêtre courte) : écarte les premières semaines")
-    p.add_argument("--comptage", choices=["minuit", "journee"], default="minuit",
-                   help="minuit : nuits passées (entrée ≤ jour < sortie) ; journee : jour de sortie compris")
+    p.add_argument("--comptage", choices=["minuit", "journee", "pondere"], default="minuit",
+                   help="minuit : nuits passées (entrée ≤ jour < sortie) ; journee : jour de sortie compris ; "
+                        "pondere : fraction de chaque jour où l'enfant est là (heures typiques ci-dessous)")
+    p.add_argument("--heure-entree", type=float, default=12.0, help="comptage pondere : heure moyenne d'admission (12)")
+    p.add_argument("--heure-sortie", type=float, default=11.0, help="comptage pondere : heure moyenne de sortie (11)")
+    p.add_argument("--duree-meme-jour", type=float, default=8.0, help="comptage pondere : durée (h) d'un séjour du même jour (8)")
     p.add_argument("--seuil-duree", type=float, default=0.9,
                    help="part minimale de durées connues par mois pour reconstituer l'occupation (0,9)")
     a = p.parse_args()
@@ -137,7 +141,8 @@ def main() -> None:
     print(f"\nPremier mois complet : {periode['premier_mois_complet']} · rodage : {periode['rodage_jours']} j"
           f" → occupation reconstituée à partir du {periode['debut']:%d/%m/%Y}")
 
-    occs = trois_scenarios(sejours, extraction, lits=lits, debut=periode["debut"], comptage=a.comptage)
+    heures = HeuresPresence(a.heure_entree, a.heure_sortie, a.duree_meme_jour)
+    occs = trois_scenarios(sejours, extraction, lits=lits, debut=periode["debut"], comptage=a.comptage, heures=heures)
 
     # Diagramme de flux : d'où viennent les séjours utilisés, et pourquoi les autres sont écartés.
     fin_sejour = sejours["sortie"].fillna(pd.Timestamp(extraction))
@@ -164,7 +169,7 @@ def main() -> None:
 
     print("\n── Loi de Little (L = λW), scénario attendu")
     try:
-        little = verifier_little(occ, sejours, scenario="attendue", comptage=a.comptage)
+        little = verifier_little(occ, sejours, scenario="attendue", comptage=a.comptage, heures=heures)
         for k, v in little.items():
             print(f"  {k} : {v}")
         if lits is not None:
@@ -175,6 +180,14 @@ def main() -> None:
                 print(f"  {k} : {v}")
     except ValueError as e:
         print(f"  non calculée : {e}")
+
+    # Pic de la journée : encadrement exact, sans hypothèse d'heure.
+    print("\n── Plus grand nombre d'enfants présents en même temps dans la journée (encadrement exact)")
+    print(f"  pic moyen : entre {occ['pic_bas'].mean():.2f} et {occ['pic_haut'].mean():.2f} enfants ; "
+          f"plus haut pic : entre {occ['pic_bas'].max():.0f} et {occ['pic_haut'].max():.0f}")
+    if lits is not None:
+        lj = occ["lits"]
+        print(f"  jours où le pic dépasse les lits : au moins {int((occ['pic_bas'] > lj).sum())}, au plus {int((occ['pic_haut'] > lj).sum())}")
 
     # Capacité incertaine (date du passage de 15 à 20 lits inconnue, lits pas tous opérationnels) : la série des
     # présents ne dépend pas du nombre de lits ; seuls les indicateurs rapportés aux lits changent.

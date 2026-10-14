@@ -37,7 +37,7 @@ def erlang_b(c: int, a: float) -> float:
 
 
 def verifier_little(occ: pd.DataFrame, sejours: pd.DataFrame, marge_bord_jours: int = 30,
-                    scenario: str = "attendue", comptage: str = "minuit") -> dict:
+                    scenario: str = "attendue", comptage: str = "minuit", heures=None) -> dict:
     """
     Compare L (mesuré) à λW (calculé séparément), sur la période intérieure de la série.
 
@@ -58,6 +58,11 @@ def verifier_little(occ: pd.DataFrame, sejours: pd.DataFrame, marge_bord_jours: 
     ev = sorties_possibles(admis, occ.index.max() + pd.Timedelta(days=1), scenario)
     W = float((ev["poids"] * ev["duree_nuits"]).sum() / ev["poids"].sum()) if len(ev) else float("nan")
     W += 1.0 if comptage == "journee" else 0.0       # comptage journalier : un jour de présence de plus par séjour
+    if comptage == "pondere" and len(ev):              # durée réelle moyenne : n + (h_s − h_e)/24, ou durée du même jour
+        a, b, m = heures.entree / 24, heures.sortie / 24, heures.meme_jour / 24
+        duree = ev["duree_nuits"].astype(float) + (b - a)
+        duree[ev["duree_nuits"] == 0] = m
+        W = float((ev["poids"] * duree).sum() / ev["poids"].sum())
     lw = lam * W
     ecart = (L - lw) / lw * 100 if lw else float("nan")
     return {
