@@ -66,7 +66,9 @@ function legendeSvg(items, x0, yb, W = Infinity) {
     const motif = it.bande ? `<rect x="${x}" y="${yb - 9}" width="20" height="10" fill="${it.couleur}" fill-opacity="${it.opacite ?? 0.18}"/>`
       : it.barre ? `<rect x="${x + 4}" y="${yb - 10}" width="12" height="11" rx="2" fill="${it.couleur}"/>`
       : `<line x1="${x}" x2="${x + 20}" y1="${yb - 4}" y2="${yb - 4}" stroke="${it.couleur}" stroke-width="${it.epaisseur ?? 2}" ${it.pointille ? `stroke-dasharray="${it.pointille}"` : ''}/>`
-    const s = `<g transform="translate(0 ${y0 - yb})">${motif}<text x="${x + 26}" y="${yb}" font-size="11.5" fill="#3d434c">${it.nom}</text></g>`
+    // Élément cliquable (legende.js) : cache ou réaffiche ce qui est dessiné avec cette couleur et ce motif.
+    const type = it.bande ? 'bande' : it.barre ? 'barre' : 'ligne'
+    const s = `<g class="leg-item" data-leg-nom="${echapper(String(it.nom))}" data-leg-couleur="${it.couleur}" data-leg-type="${type}" transform="translate(0 ${y0 - yb})" style="cursor:pointer"><title>Cliquer pour afficher ou masquer</title><rect x="${x - 2}" y="${yb - 12}" width="${largeurItem(it) - 6}" height="16" fill="transparent"/>${motif}<text x="${x + 26}" y="${yb}" font-size="11.5" fill="#3d434c">${it.nom}</text></g>`
     x += largeurItem(it)
     return s
   }).join('')
