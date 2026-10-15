@@ -60,22 +60,15 @@ docker-data/
 Thumbs.db
 Desktop.ini
 
-# Modèles (Python) : données patients et sorties jamais suivies par git
-modeles/donnees/
-modeles/resultats/
+# Données de patients : jamais suivies par git (outil de saisie et modèle : dépôts outil-saisi et nera-modele)
+*.csv
+*.heic
 __pycache__/
 .pytest_cache/
-
-# Outil de saisie : photos de registres, exports et sauvegardes = données de patients, jamais sur git
-modeles/outil-saisie/photos*/
-modeles/outil-saisie/**/*.jpg
-modeles/outil-saisie/**/*.jpeg
-modeles/outil-saisie/**/*.heic
-modeles/outil-saisie/**/*.csv
-modeles/outil-saisie/**/*.json
 
 # Réglages locaux de l outil de développement
 .claude/
 
-# Vérification des calculs : registre fictif généré à chaque lancement
-modeles/verification/sortie/
+
+# Ancien emplacement de l outil et du modèle (déplacés dans outil-saisi et nera-modele)
+modeles/

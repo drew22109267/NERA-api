@@ -22,7 +22,7 @@ public record ResultatIndicateurs(
 
 /// <summary>
 /// Indicateurs hospitaliers calculés sur les registres importés — mêmes définitions que la chaîne
-/// d'analyse du mémoire (backend/modeles/nera) :
+/// d'analyse du mémoire (dépôt outil-saisi, paquet Python « traitement ») :
 ///
 ///   Occupation (recensement de minuit) : un patient compte le jour d si entrée ≤ d &lt; sortie.
 ///   Journées d'hospitalisation JH = Σ présents ; TOM = JH / (lits × jours) × 100.
