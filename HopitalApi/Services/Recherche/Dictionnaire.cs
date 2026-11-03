@@ -33,7 +33,7 @@ public static class Dictionnaire
     /// transfert externe = vers un autre hôpital. Le vocabulaire des registres (« référé », « déféré »…)
     /// s'y rattache par les correspondances de chaque hôpital.
     /// </summary>
-    public static readonly string[] Issues = { "Sortie", "Transfert interne", "Transfert externe", "Décès", "Sortie contre avis médical", "Évasion" };
+    public static readonly string[] Issues = { "Sortie", "Mise en observation", "Transfert interne", "Transfert externe", "Décès", "Sortie contre avis médical", "Évasion" };
     public static readonly string[] Orientations = { "Domicile", "Hospitalisé", "Transfert externe", "Décédé" };
     public static readonly string[] AncienNouveau = { "Nouveau", "Ancien" };
     public static readonly string[] ResultatsGe = { "Positif", "Négatif" };
