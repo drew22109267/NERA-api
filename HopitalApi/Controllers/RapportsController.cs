@@ -39,6 +39,7 @@ public class RapportsController : BaseController
             divergences = passages.Count(p => p.DecisionDivergence),
             tauxOccupationMoyen = armes > 0 ? Math.Round(100.0 * services.Sum(s => s.Occupes) / armes, 1) : 0,
             litsBloques = services.Sum(s => s.Bloques),
+            litsArmes = armes,
             rendezVousTotal = rdv.Count,
             rendezVousHonores = rdv.Count(r => r.Statut == "Honoré"),
             rendezVousManques = rdv.Count(r => r.Statut == "Manqué"),

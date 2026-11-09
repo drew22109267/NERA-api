@@ -63,6 +63,10 @@ public class AuthController : BaseController
     public async Task<ActionResult<SessionDto>> Signup(SignupDto dto)
     {
         if (!RolesConnus.Contains(dto.Role)) return BadRequest(new { message = "Rôle inconnu." });
+        // L'inscription libre est réservée aux patients : un compte du personnel donne accès aux
+        // dossiers, il est donc créé par un administrateur (écran Administration › Comptes).
+        if (dto.Role != "patient")
+            return StatusCode(403, new { message = "Les comptes du personnel sont créés par l'administrateur de l'établissement." });
         if (await _db.Utilisateurs.AnyAsync(x => x.Email.ToLower() == dto.Email.ToLower()))
             return Conflict(new { message = "Cette adresse est déjà utilisée." });
 
